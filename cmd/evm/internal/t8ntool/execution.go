@@ -20,12 +20,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdmath "math"
 	"math/big"
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
@@ -160,6 +162,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		isEIP4762   = chainConfig.IsUBT(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 		isAmsterdam = chainConfig.IsAmsterdam(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 		rules       = chainConfig.Rules(big.NewInt(int64(pre.Env.Number)), pre.Env.Random != nil, pre.Env.Timestamp)
+		isAuRa      = chainConfig.Aura != nil
 	)
 	if pre.AllocPath != "" {
 		var err error
@@ -289,7 +292,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 			snapshot = statedb.Snapshot()
 			gp       = gaspool.Snapshot()
 		)
-		receipt, bal, err := core.ApplyTransactionWithEVM(context.Background(), msg, gaspool, statedb, vmContext.BlockNumber, blockHash, pre.Env.Timestamp, tx, evm)
+		receipt, bal, err := core.ApplyTransactionWithEVM(context.Background(), msg, gaspool, statedb, vmContext.BlockNumber, blockHash, pre.Env.Timestamp, tx, evm, nil)
 		if err != nil {
 			statedb.RevertToSnapshot(snapshot)
 			log.Info("rejected tx", "index", i, "hash", tx.Hash(), "from", msg.From, "error", err)
@@ -312,7 +315,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 	// TODO(rjl493456442) call engine.Finalize() instead
 	// Add mining reward? (-1 means rewards are disabled)
-	if miningReward >= 0 {
+	if miningReward >= 0 && !isAuRa {
 		// Add mining reward. The mining reward may be `0`, which only makes a difference in the cases
 		// where
 		// - the coinbase self-destructed, or
@@ -335,6 +338,12 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		}
 		statedb.AddBalance(pre.Env.Coinbase, uint256.MustFromBig(minerReward), tracing.BalanceIncreaseRewardMineBlock)
 	}
+	if isAuRa {
+		if err := pre.applyAuRaFinalization(chainConfig, statedb, evm); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	// Gather the execution-layer triggered requests.
 	var allLogs []*types.Log
 	for _, receipt := range receipts {
@@ -395,6 +404,20 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 	body, _ := rlp.EncodeToBytes(includedTxs)
 	return statedb, execRs, body, nil
+}
+
+func (pre *Prestate) applyAuRaFinalization(chainConfig *params.ChainConfig, statedb *state.StateDB, evm *vm.EVM) error {
+	// Only the coinbase and block number are consulted when computing rewards.
+	header := &types.Header{Coinbase: pre.Env.Coinbase, Number: evm.Context.BlockNumber}
+	if err := aura.ApplyRewards(chainConfig, header, statedb, evm); err != nil {
+		return NewError(ErrorEVM, fmt.Errorf("failed applying AuRa block reward: %v", err))
+	}
+	if pre.Env.Withdrawals != nil {
+		if err := aura.ExecuteSystemWithdrawals(chainConfig, evm, pre.Env.Withdrawals); err != nil {
+			return NewError(ErrorEVM, fmt.Errorf("failed applying AuRa withdrawals: %v", err))
+		}
+	}
+	return nil
 }
 
 // newPrestateTrieDBConfig returns the triedb config used to construct the

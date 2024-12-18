@@ -23,8 +23,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
@@ -331,19 +333,34 @@ func (beacon *Beacon) verifyHeaders(chain consensus.ChainHeaderReader, headers [
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the beacon protocol. The changes are done inline.
-func (beacon *Beacon) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
+func (beacon *Beacon) Prepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) error {
 	if !chain.Config().IsPostMerge(header.Number.Uint64(), header.Time) {
-		return beacon.ethone.Prepare(chain, header)
+		return beacon.ethone.Prepare(chain, header, statedb)
 	}
 	header.Difficulty = beaconDifficulty
 	return nil
 }
 
 // Finalize implements consensus.Engine.
-func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body) {
+func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body, receipts []*types.Receipt, evm *vm.EVM) {
 	if !beacon.IsPoSHeader(header) {
-		beacon.ethone.Finalize(chain, header, state, body)
+		beacon.ethone.Finalize(chain, header, state, body, receipts, evm)
+		return
 	}
+
+	// GNOSIS: if the network has merged and this was an ex-AuRa
+	// network, still call the reward contract.
+	if a, ok := beacon.ethone.(*aura.AuRa); ok {
+		if err := a.ApplyRewards(header, state, evm); err != nil {
+			panic(fmt.Sprintf("error applying reward %v", err))
+		}
+		if body.Withdrawals != nil {
+			if err := a.ExecuteSystemWithdrawals(evm, body.Withdrawals); err != nil {
+				panic(err)
+			}
+		}
+	}
+	// No block reward which is issued by consensus layer instead.
 }
 
 // Seal generates a new sealing request for the given input block and pushes
@@ -406,4 +423,12 @@ func (beacon *Beacon) SetThreads(threads int) {
 	if th, ok := beacon.ethone.(threaded); ok {
 		th.SetThreads(threads)
 	}
+}
+
+func (beacon *Beacon) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.ChainHeaderReader) error {
+	ethone, ok := beacon.ethone.(*aura.AuRa)
+	if !ok {
+		panic("AuraPrepare called in a non-Aura context")
+	}
+	return ethone.AuraPrepare(evm, header, chain)
 }

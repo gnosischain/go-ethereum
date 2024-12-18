@@ -138,7 +138,7 @@ func TestConversionQueueAutoRestartBatch(t *testing.T) {
 
 	// Create a heavy transaction to ensure the first batch runs long enough
 	// for subsequent tasks to be queued while it is active.
-	heavy := makeMultiBlobTx(0, 1, 1, 1, int(params.BlobTxMaxBlobs), 0, key)
+	heavy := makeMultiBlobTx(0, 1, 1, 1, int(params.DefaultBlobTxMaxBlobs), 0, key)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
