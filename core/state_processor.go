@@ -24,6 +24,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -115,6 +117,12 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	// Run the pre-execution system calls
 	blockAccessList.Merge(PreExecution(ctx, block.BeaconRoot(), parent, config, evm, block.Number(), block.Time()))
 
+	if b, ok := p.chain.Engine().(*beacon.Beacon); ok {
+		if _, ok := b.InnerEngine().(*aura.AuRa); ok {
+			b.AuraPrepare(evm, block.Header(), p.chain)
+		}
+	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		// Publish the progress, letting the prefetcher skip caught up work.
@@ -126,7 +134,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.SetTxContext(tx.Hash(), i, uint32(i+1))
-		receipt, bal, err := applyTransactionWithEVM(ctx, msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm, eagerBloom)
+		receipt, bal, err := applyTransactionWithEVM(ctx, msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm, eagerBloom, p.chain.Engine())
 		if err != nil {
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
@@ -144,15 +152,15 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	}
 	blockAccessList.Merge(bal)
 
+	// Join the pipeline. The receipts are only complete, and safe to hand back,
+	// once it has filled in their blooms.
+	digest := pipeline.join()
+
 	// Finalize the block, applying any consensus engine specific extras
 	// (e.g. block rewards).
 	//
 	// TODO(rjl493456442) integrate it into the PostExecution.
-	p.chain.Engine().Finalize(p.chain, header, tracingStateDB, block.Body(), uint32(len(block.Transactions())+1), blockAccessList)
-
-	// Join the pipeline. The receipts are only complete, and safe to hand back,
-	// once it has filled in their blooms.
-	digest := pipeline.join()
+	p.chain.Engine().Finalize(p.chain, header, tracingStateDB, block.Body(), receipts, evm, uint32(len(block.Transactions())+1), blockAccessList)
 
 	return &ProcessResult{
 		Receipts: receipts,
@@ -227,14 +235,14 @@ func PostExecution(ctx context.Context, config *params.ChainConfig, number *big.
 // ApplyTransactionWithEVM attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment similar to ApplyTransaction. However,
 // this method takes an already created EVM instance as input.
-func ApplyTransactionWithEVM(ctx context.Context, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
-	return applyTransactionWithEVM(ctx, msg, gp, statedb, blockNumber, blockHash, blockTime, tx, evm, true)
+func ApplyTransactionWithEVM(ctx context.Context, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM, engine consensus.Engine) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
+	return applyTransactionWithEVM(ctx, msg, gp, statedb, blockNumber, blockHash, blockTime, tx, evm, true, engine)
 }
 
 // applyTransactionWithEVM is ApplyTransactionWithEVM with the receipt bloom
 // filter optional. The block processor leaves it out and lets its receipt
 // pipeline hash the logs instead.
-func applyTransactionWithEVM(ctx context.Context, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM, withBloom bool) (receipt *types.Receipt, bal *bal.ConstructionBlockAccessList, err error) {
+func applyTransactionWithEVM(ctx context.Context, msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM, withBloom bool, engine consensus.Engine) (receipt *types.Receipt, bal *bal.ConstructionBlockAccessList, err error) {
 	_, _, spanEnd := telemetry.StartSpan(ctx, "core.ApplyTransactionWithEVM",
 		telemetry.StringAttribute("tx.hash", tx.Hash().Hex()),
 		telemetry.IntAttribute("tx.index", statedb.TxIndex()),
@@ -249,6 +257,24 @@ func applyTransactionWithEVM(ctx context.Context, msg *Message, gp *GasPool, sta
 			defer func() { hooks.OnTxEnd(receipt, err) }()
 		}
 	}
+
+	if evm.ChainConfig().IsLondon(blockNumber) {
+		switch engine := engine.(type) {
+		case *beacon.Beacon:
+			if a, ok := engine.InnerEngine().(*aura.AuRa); ok && msg.GasFeeCap.BitLen() == 0 {
+				if a.IsServiceTransaction(msg.From, evm) {
+					msg.SetFree()
+				}
+			}
+		case *aura.AuRa:
+			if msg.GasFeeCap.BitLen() == 0 {
+				if engine.IsServiceTransaction(msg.From, evm) {
+					msg.SetFree()
+				}
+			}
+		}
+	}
+
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
@@ -322,13 +348,13 @@ func makeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, b
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(ctx context.Context, evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
+func ApplyTransaction(ctx context.Context, evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, engine consensus.Engine) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM(ctx, msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm)
+	return ApplyTransactionWithEVM(ctx, msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm, engine)
 }
 
 // systemCallGasBudget returns the gas budget for system calls.

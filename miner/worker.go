@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core"
@@ -235,7 +236,7 @@ func (miner *Miner) generateWork(ctx context.Context, genParam *generateParams, 
 	work.bal.Merge(bal)
 
 	// Apply the consensus-specific post-transaction changes
-	miner.engine.Finalize(miner.chain, work.header, work.state, &body, uint32(work.tcount+1), work.bal)
+	miner.engine.Finalize(miner.chain, work.header, work.state, &body, work.receipts, work.evm, uint32(work.tcount+1), work.bal)
 
 	// Assemble the block for delivery.
 	_, _, assembleSpanEnd := telemetry.StartSpan(ctx, "miner.AssembleBlock")
@@ -320,9 +321,29 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, miner.config.GasCeil)
 		}
 	}
+	// Retrieve the parent state to execute on top.
+	state, err := miner.chain.StateAtForkBoundary(parent, header)
+	if err != nil {
+		return nil, err
+	}
+
+	b, ok := miner.engine.(*beacon.Beacon)
+	if ok {
+		if header.Difficulty == nil {
+			header.Difficulty = common.Big0
+		}
+
+		// Balancer hack hardfork: rewrite the bytecode at the fork transition
+		if miner.chainConfig.Aura != nil {
+			context := core.NewEVMBlockContext(header, miner.chain, nil)
+			evm := vm.NewEVM(context, state, miner.chainConfig, *miner.chain.GetVMConfig())
+			defer evm.Release()
+			b.AuraPrepare(evm, header, miner.chain)
+		}
+	}
 	// Run the consensus preparation with the default or customized consensus engine.
 	// Note that the `header.Time` may be changed.
-	if err := miner.engine.Prepare(miner.chain, header); err != nil {
+	if err := miner.engine.Prepare(miner.chain, header, state); err != nil {
 		log.Error("Failed to prepare header for sealing", "err", err)
 		return nil, err
 	}
@@ -346,7 +367,7 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
-	env, err := miner.makeEnv(parent, header, genParams.coinbase, witness)
+	env, err := miner.makeEnv(parent, header, genParams.coinbase, witness, state)
 	if err != nil {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
@@ -357,14 +378,10 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 }
 
 // makeEnv creates a new environment for the sealing block.
-func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase common.Address, witness bool) (*environment, error) {
-	// Retrieve the parent state to execute on top.
-	state, err := miner.chain.StateAtForkBoundary(parent, header)
-	if err != nil {
-		return nil, err
-	}
+func (miner *Miner) makeEnv(_ *types.Header, header *types.Header, coinbase common.Address, witness bool, state *state.StateDB) (*environment, error) {
 	var bundle *stateless.Witness
 	if witness {
+		var err error
 		bundle, err = stateless.NewWitness(header, miner.chain, false)
 		if err != nil {
 			return nil, err
@@ -442,7 +459,7 @@ func (miner *Miner) applyTransaction(ctx context.Context, env *environment, tx *
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Snapshot()
 	)
-	receipt, bal, err := core.ApplyTransaction(ctx, env.evm, env.gasPool, env.state, env.header, tx)
+	receipt, bal, err := core.ApplyTransaction(ctx, env.evm, env.gasPool, env.state, env.header, tx, miner.engine)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.Set(gp)

@@ -85,6 +85,18 @@ func TestState(t *testing.T) {
 func TestLegacyState(t *testing.T) {
 	st := new(testMatcher)
 	initMatcher(st)
+	// These legacy fixtures expect EIP-7610 storage-only creation collisions,
+	// which are no longer rejected. Keep the expectations scoped to the affected
+	// forks and cases so the other cases in these files still run normally.
+	st.fails(`^TestLegacyState/stSStoreTest/InitCollision\.json/Constantinople(Fix)?/[0-3]/`, "EIP-7610 storage-only creation collisions are not rejected")
+	st.fails(`^TestLegacyState/stExtCodeHash/dynamicAccountOverwriteEmpty\.json/Constantinople(Fix)?/0/`, "EIP-7610 storage-only creation collisions are not rejected")
+	st.fails(`^TestLegacyState/stCreate2/create2collisionStorage\.json/Constantinople/[0-2]/`, "EIP-7610 storage-only creation collisions are not rejected")
+
+	// Gnosis activates the EIP-170 code size limit at Shanghai, whereas these
+	// Ethereum fixtures expect it at earlier forks.
+	st.fails(`^TestLegacyState/stCodeSizeLimit/codesizeOOGInvalidSize\.json/(EIP158|Byzantium|Constantinople(Fix)?)/0/`, "Gnosis activates EIP-170 at Shanghai")
+	st.fails(`^TestLegacyState/stCreateTest/CREATE_ContractRETURNBigOffset\.json/(Byzantium|Constantinople(Fix)?)/[0-2]/`, "Gnosis activates EIP-170 at Shanghai")
+
 	st.walk(t, legacyStateTestDir, func(t *testing.T, name string, test *StateTest) {
 		execStateTest(t, st, test)
 	})
