@@ -207,7 +207,7 @@ func (api *ConsensusAPI) ForkchoiceUpdatedV3(ctx context.Context, update engine.
 			return engine.STATUS_INVALID, attributesErr("missing withdrawals")
 		case params.BeaconRoot == nil:
 			return engine.STATUS_INVALID, attributesErr("missing beacon root")
-		case !api.checkFork(params.Timestamp, forks.Cancun, forks.Prague, forks.Osaka, forks.BPO1, forks.BPO2, forks.BPO3, forks.BPO4, forks.BPO5):
+		case !api.checkFork(params.Timestamp, forks.Cancun, forks.Prague, forks.Balancer, forks.Osaka, forks.BPO1, forks.BPO2, forks.BPO3, forks.BPO4, forks.BPO5):
 			return engine.STATUS_INVALID, unsupportedForkErr("fcuV3 must only be called for cancun/prague/osaka payloads")
 		}
 	}
@@ -484,7 +484,7 @@ func (api *ConsensusAPI) GetPayloadV4(payloadID engine.PayloadID) (*engine.Execu
 		payloadID,
 		false,
 		[]engine.PayloadVersion{engine.PayloadV3},
-		[]forks.Fork{forks.Prague},
+		[]forks.Fork{forks.Prague, forks.Balancer},
 	)
 }
 
@@ -577,7 +577,7 @@ func (api *ConsensusAPI) GetBlobsV1(ctx context.Context, hashes []common.Hash) (
 	// Reject the request if Osaka has been activated.
 	// follow https://github.com/ethereum/execution-apis/blob/main/src/engine/osaka.md#cancun-api
 	head := api.eth.BlockChain().CurrentHeader()
-	if !api.checkFork(head.Time, forks.Cancun, forks.Prague) {
+	if !api.checkFork(head.Time, forks.Cancun, forks.Prague, forks.Balancer) {
 		return nil, unsupportedForkErr("engine_getBlobsV1 is only available at Cancun/Prague fork")
 	}
 	if len(hashes) > 128 {
@@ -845,7 +845,7 @@ func (api *ConsensusAPI) NewPayloadV4(ctx context.Context, params engine.Executa
 		return invalidStatus, paramsErr("nil beaconRoot post-cancun")
 	case executionRequests == nil:
 		return invalidStatus, paramsErr("nil executionRequests post-prague")
-	case !api.checkFork(params.Timestamp, forks.Prague, forks.Osaka, forks.BPO1, forks.BPO2, forks.BPO3, forks.BPO4, forks.BPO5):
+	case !api.checkFork(params.Timestamp, forks.Prague, forks.Balancer, forks.Osaka, forks.BPO1, forks.BPO2, forks.BPO3, forks.BPO4, forks.BPO5):
 		return invalidStatus, unsupportedForkErr("newPayloadV4 must only be called for prague/osaka payloads")
 	}
 	requests := convertRequests(executionRequests)

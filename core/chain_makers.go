@@ -120,7 +120,7 @@ func (b *BlockGen) addTx(bc *BlockChain, vmConfig vm.Config, tx *types.Transacti
 		evm          = vm.NewEVM(blockContext, b.statedb, b.cm.config, vmConfig)
 	)
 	b.statedb.SetTxContext(tx.Hash(), len(b.txs), uint32(len(b.txs)+1))
-	receipt, bal, err := ApplyTransaction(evm, b.gasPool, b.statedb, b.header, tx)
+	receipt, bal, err := ApplyTransaction(evm, b.gasPool, b.statedb, b.header, tx, b.engine)
 	if err != nil {
 		panic(err)
 	}
@@ -391,11 +391,11 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			misc.ApplyEIP7997(statedb)
 		}
 
+		blockContext := NewEVMBlockContext(b.header, cm, &b.header.Coinbase)
+		blockContext.Random = &common.Hash{} // enable post-merge instruction set
+		evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
 		if config.IsPrague(b.header.Number, b.header.Time) || config.IsUBT(b.header.Number, b.header.Time) {
 			// EIP-2935
-			blockContext := NewEVMBlockContext(b.header, cm, &b.header.Coinbase)
-			blockContext.Random = &common.Hash{} // enable post-merge instruction set
-			evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
 			ProcessParentBlockHash(b.header.ParentHash, evm, b.bal)
 		}
 
@@ -426,7 +426,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			}
 		}
 		// Apply the consensus-specific post-transaction changes
-		b.engine.Finalize(cm, b.header, statedb, &body, uint32(len(b.txs)+1), b.bal)
+		b.engine.Finalize(cm, b.header, statedb, &body, b.receipts, evm, uint32(len(b.txs)+1), b.bal)
 
 		// Assemble the block for delivery.
 		block := AssembleBlock(cm, b.header, statedb, &body, b.receipts, b.bal)

@@ -19,11 +19,14 @@ package core
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -100,6 +103,29 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	// Run the pre-execution system calls
 	blockAccessList.Merge(PreExecution(ctx, block.BeaconRoot(), parent, config, evm, block.Number(), block.Time()))
 
+	b, ok := p.chain.Engine().(*beacon.Beacon)
+	if ok {
+		// XXX check this is ok
+		b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
+
+		// Balancer hack hardfork: rewrite the bytecode at the fork transition
+		if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
+			parent := p.chain.GetHeaderByHash(block.ParentHash())
+			if parent == nil {
+				panic("couldn't find parent when trying to apply code rewrite")
+			}
+			// rewrite the code at the transition boundary
+			if !config.IsBalancer(parent.Number, parent.Time) {
+				statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+				// Extra address, used for testing
+				if config.Aura.BalancerTestRewriteAddress != nil {
+					statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+				}
+			}
+		}
+		b.AuraPrepare(p.chain, block.Header(), statedb)
+	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		// Publish the progress, letting the prefetcher skip caught up work.
@@ -115,7 +141,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 			telemetry.StringAttribute("tx.hash", tx.Hash().Hex()),
 			telemetry.IntAttribute("tx.index", i),
 		)
-		receipt, bal, err := ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm)
+		receipt, bal, err := ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, context.Time, tx, evm, p.chain.Engine())
 		if err != nil {
 			spanEnd(&err)
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -135,7 +161,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	// (e.g. block rewards).
 	//
 	// TODO(rjl493456442) integrate it into the PostExecution.
-	p.chain.Engine().Finalize(p.chain, header, tracingStateDB, block.Body(), uint32(len(block.Transactions())+1), blockAccessList)
+	p.chain.Engine().Finalize(p.chain, header, tracingStateDB, block.Body(), receipts, evm, uint32(len(block.Transactions())+1), blockAccessList)
 
 	return &ProcessResult{
 		Receipts: receipts,
@@ -215,7 +241,7 @@ func PostExecution(ctx context.Context, config *params.ChainConfig, number *big.
 // ApplyTransactionWithEVM attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment similar to ApplyTransaction. However,
 // this method takes an already created EVM instance as input.
-func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM) (receipt *types.Receipt, bal *bal.ConstructionBlockAccessList, err error) {
+func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, blockTime uint64, tx *types.Transaction, evm *vm.EVM, engine consensus.Engine) (receipt *types.Receipt, bal *bal.ConstructionBlockAccessList, err error) {
 	if hooks := evm.Config.Tracer; hooks != nil {
 		if hooks.OnTxStart != nil {
 			hooks.OnTxStart(evm.GetVMContext(), tx, msg.From)
@@ -224,6 +250,24 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 			defer func() { hooks.OnTxEnd(receipt, err) }()
 		}
 	}
+
+	if evm.ChainConfig().IsLondon(blockNumber) {
+		switch engine := engine.(type) {
+		case *beacon.Beacon:
+			if a, ok := engine.InnerEngine().(*aura.AuRa); ok && msg.GasFeeCap.BitLen() == 0 {
+				if a.IsServiceTransaction(msg.From, evm) {
+					msg.SetFree()
+				}
+			}
+		case *aura.AuRa:
+			if msg.GasFeeCap.BitLen() == 0 {
+				if engine.IsServiceTransaction(msg.From, evm) {
+					msg.SetFree()
+				}
+			}
+		}
+	}
+
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
 	if err != nil {
@@ -286,13 +330,13 @@ func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, b
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
+func ApplyTransaction(evm *vm.EVM, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, engine consensus.Engine) (*types.Receipt, *bal.ConstructionBlockAccessList, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(evm.ChainConfig(), header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	return ApplyTransactionWithEVM(msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm)
+	return ApplyTransactionWithEVM(msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm, engine)
 }
 
 // systemCallGasBudget returns the gas budget for system calls.
@@ -481,4 +525,16 @@ func AssembleBlock(chain consensus.ChainHeaderReader, header *types.Header, stat
 	balHash := bal.Hash()
 	header.BlockAccessListHash = &balHash
 	return types.NewBlock(header, body, receipts, trie.NewStackTrie(nil)).WithAccessListUnsafe(bal)
+}
+
+func MakeAuraSyscall(statedb vm.StateDB, context vm.BlockContext, chainConfig *params.ChainConfig, vmConfig vm.Config) aura.Syscall {
+	return func(contractaddr common.Address, data []byte) ([]byte, error) {
+		evm := vm.NewEVM(context, statedb, chainConfig, vmConfig)
+		ret, _, err := evm.Call(params.SystemAddress, contractaddr, data, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
+		if err != nil {
+			panic(err)
+		}
+		statedb.Finalise(true)
+		return ret, err
+	}
 }

@@ -69,12 +69,6 @@ const (
 	// never hurt, which is aligned with maxBlobsPerTx constraint enforced internally.
 	txMaxSize = 1024 * 1024
 
-	// maxBlobsPerTx is the maximum number of blobs that a single transaction can
-	// carry. We choose a smaller limit than the protocol-permitted MaxBlobsPerBlock
-	// in order to ensure network and txpool stability.
-	// Note: if you increase this, validation will fail on txMaxSize.
-	maxBlobsPerTx = params.BlobTxMaxBlobs
-
 	// maxTxsPerAccount is the maximum number of blob transactions admitted from
 	// a single account. The limit is enforced to minimize the DoS potential of
 	// a private tx cancelling publicly propagated blobs.
@@ -642,7 +636,7 @@ func (p *BlobPool) Init(gasTip uint64, head *types.Header, reserver txpool.Reser
 	p.state = state
 
 	// Create new slotter for pre-Osaka blob configuration.
-	slotter := newSlotterEIP7594(params.BlobTxMaxBlobs)
+	slotter := newSlotterEIP7594(p.chain.Config().GetMaxBlobsPerTransaction())
 
 	// See if we need to migrate the queue blob store after fusaka
 	slotter, err = tryMigrate(p.chain.Config(), slotter, queuedir)
@@ -693,7 +687,7 @@ func (p *BlobPool) Init(gasTip uint64, head *types.Header, reserver txpool.Reser
 	}
 	var (
 		basefee = uint256.MustFromBig(eip1559.CalcBaseFee(p.chain.Config(), head))
-		blobfee = uint256.NewInt(params.BlobTxMinBlobGasprice)
+		blobfee = uint256.NewInt(p.chain.Config().GetMinBlobGasPrice())
 	)
 	if head.ExcessBlobGas != nil {
 		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(p.chain.Config(), head))
@@ -1233,7 +1227,7 @@ func (p *BlobPool) Reset(oldHead, newHead *types.Header) {
 	// Reset the price heap for the new set of basefee/blobfee pairs
 	var (
 		basefee = uint256.MustFromBig(eip1559.CalcBaseFee(p.chain.Config(), newHead))
-		blobfee = uint256.MustFromBig(big.NewInt(params.BlobTxMinBlobGasprice))
+		blobfee = uint256.NewInt(p.chain.Config().GetMinBlobGasPrice())
 	)
 	if newHead.ExcessBlobGas != nil {
 		blobfee = uint256.MustFromBig(eip4844.CalcBlobFee(p.chain.Config(), newHead))
@@ -1570,7 +1564,7 @@ func (p *BlobPool) ValidateTxBasics(tx *types.Transaction) error {
 		Accept:       1 << types.BlobTxType,
 		MaxSize:      txMaxSize,
 		MinTip:       p.gasTip.Load().ToBig(),
-		MaxBlobCount: maxBlobsPerTx,
+		MaxBlobCount: p.chain.Config().GetMaxBlobsPerTransaction(),
 	}
 	return txpool.ValidateTransaction(tx, p.head.Load(), p.signer, opts)
 }
@@ -2628,7 +2622,7 @@ func (p *BlobPool) Clear() {
 
 	var (
 		basefee = uint256.MustFromBig(eip1559.CalcBaseFee(p.chain.Config(), p.head.Load()))
-		blobfee = uint256.NewInt(params.BlobTxMinBlobGasprice)
+		blobfee = uint256.NewInt(p.chain.Config().GetMinBlobGasPrice())
 	)
 	p.evict = newPriceHeap(basefee, blobfee, p.index)
 }

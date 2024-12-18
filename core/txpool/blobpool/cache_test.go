@@ -58,7 +58,7 @@ func newTestCache(t *testing.T, txConfig []txSpec) *testCache {
 	if err := os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	store, err := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotterEIP7594(params.BlobTxMaxBlobs), nil)
+	store, err := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotterEIP7594(params.DefaultBlobTxMaxBlobs), nil)
 	if err != nil {
 		t.Fatalf("billy open: %v", err)
 	}
