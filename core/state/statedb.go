@@ -795,7 +795,7 @@ func (s *StateDB) Finalise(rules params.Rules) *bal.ConstructionBlockAccessList 
 			// finalise or delete, so ignore it here.
 			continue
 		}
-		if obj.selfDestructed || (rules.IsEIP158 && obj.empty()) {
+		if obj.selfDestructed || (rules.IsEIP158 && obj.empty() && obj.address != params.SystemAddress) {
 			delete(s.stateObjects, obj.address)
 			s.markDelete(addr)
 

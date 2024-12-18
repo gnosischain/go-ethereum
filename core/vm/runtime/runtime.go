@@ -107,7 +107,7 @@ func setDefaults(cfg *Config) {
 		cfg.BaseFee = big.NewInt(params.InitialBaseFee)
 	}
 	if cfg.BlobBaseFee == nil {
-		cfg.BlobBaseFee = big.NewInt(params.BlobTxMinBlobGasprice)
+		cfg.BlobBaseFee = new(big.Int).SetUint64(cfg.ChainConfig.GetMinBlobGasPrice())
 	}
 	if cfg.Random == nil {
 		cfg.Random = new(common.Hash)
