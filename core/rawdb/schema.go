@@ -128,6 +128,9 @@ var (
 	configPrefix   = []byte("ethereum-config-")  // config prefix for the db
 	genesisPrefix  = []byte("ethereum-genesis-") // genesis state prefix for the db
 
+	EpochPrefix        = []byte("aura-epoch-")
+	PendingEpochPrefix = []byte("aura-pending-epoch-")
+
 	CliqueSnapshotPrefix = []byte("clique-")
 
 	BestUpdateKey         = []byte("update-")    // bigEndian64(syncPeriod) -> RLP(types.LightClientUpdate)  (nextCommittee only referenced by root hash)
@@ -361,4 +364,12 @@ func filterMapBlockLVKey(number uint64) []byte {
 	copy(key[:l], filterMapBlockLVPrefix)
 	binary.BigEndian.PutUint64(key[l:], number)
 	return key
+}
+
+func epochKey(key []byte) []byte {
+	return append(EpochPrefix, key...)
+}
+
+func pendingEpochKey(key []byte) []byte {
+	return append(PendingEpochPrefix, key...)
 }
