@@ -508,7 +508,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 	chainHeadReader := &simChainHeadReader{ctx, sim.b}
 
 	// Apply the consensus-specific post-transaction changes
-	sim.b.Engine().Finalize(chainHeadReader, header, sim.state, blockBody)
+	sim.b.Engine().Finalize(chainHeadReader, header, sim.state, blockBody, receipts, evm)
 
 	// Assemble the block
 	b := core.AssembleBlock(chainHeadReader, header, sim.state, blockBody, receipts, blockAccessList)

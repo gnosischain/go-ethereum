@@ -18,6 +18,7 @@ package core
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +76,7 @@ type Genesis struct {
 	ExcessBlobGas *uint64     `json:"excessBlobGas"` // EIP-4844
 	BlobGasUsed   *uint64     `json:"blobGasUsed"`   // EIP-4844
 	SlotNumber    *uint64     `json:"slotNumber"`    // EIP-7843
+	AuRaSeal      []byte      `json:"auraSeal,omitempty"`
 }
 
 // copy copies the genesis.
@@ -242,6 +244,10 @@ func getGenesisState(db ethdb.Database, blockhash common.Hash) (alloc types.Gene
 		genesis = DefaultSepoliaGenesisBlock()
 	case params.HoodiGenesisHash:
 		genesis = DefaultHoodiGenesisBlock()
+	case params.GnosisGenesisHash:
+		genesis = DefaultGnosisGenesisBlock()
+	case params.ChiadoGenesisHash:
+		genesis = DefaultChiadoGenesisBlock()
 	}
 	if genesis != nil {
 		return genesis.Alloc, nil
@@ -468,6 +474,10 @@ func (g *Genesis) chainConfigOrDefault(ghash common.Hash, stored *params.ChainCo
 		return params.SepoliaChainConfig
 	case ghash == params.HoodiGenesisHash:
 		return params.HoodiChainConfig
+	case ghash == params.GnosisGenesisHash:
+		return params.GnosisChainConfig
+	case ghash == params.ChiadoGenesisHash:
+		return params.ChiadoChainConfig
 	default:
 		return stored
 	}
@@ -502,7 +512,14 @@ func (g *Genesis) toBlockWithRoot(root common.Hash) *types.Block {
 		Difficulty: g.Difficulty,
 		MixDigest:  g.Mixhash,
 		Coinbase:   g.Coinbase,
+		Signature:  g.AuRaSeal,
 		Root:       root,
+	}
+
+	// If this is an Aura chain but AuRaSeal is not provided or empty,
+	// set it to 65 zero bytes to ensure proper RLP encoding
+	if g.Config != nil && g.Config.Aura != nil && len(head.Signature) == 0 && (g.Config.TerminalTotalDifficulty != nil && g.Config.TerminalTotalDifficulty.Sign() != 0) {
+		head.Signature = make([]byte, 65)
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
@@ -694,6 +711,48 @@ func SystemContractAllocs() types.GenesisAlloc {
 
 		// EIP-7997 - Deterministic deployment factory
 		params.DeterministicFactoryAddress: {Nonce: 1, Code: params.DeterministicFactoryCode, Balance: common.Big0},
+	}
+}
+
+//go:embed allocs
+var allocs embed.FS
+
+func readPrealloc(filename string) GenesisAlloc {
+	f, err := allocs.Open(filename)
+	if err != nil {
+		panic(fmt.Sprintf("Could not open genesis preallocation for %s: %v", filename, err))
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	ga := make(GenesisAlloc)
+	err = decoder.Decode(&ga)
+	if err != nil {
+		panic(fmt.Sprintf("Could not parse genesis preallocation for %s: %v", filename, err))
+	}
+	return ga
+}
+
+// DefaultGnosisGenesisBlock returns the Gnosis network genesis block.
+func DefaultGnosisGenesisBlock() *Genesis {
+	return &Genesis{
+		Config:     params.GnosisChainConfig,
+		Timestamp:  0,
+		AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   0x989680,
+		Difficulty: big.NewInt(0x20000),
+		Alloc:      readPrealloc("allocs/gnosis.json"),
+	}
+}
+
+// DefaultChiadoGenesisBlock returns the Chiado network genesis block.
+func DefaultChiadoGenesisBlock() *Genesis {
+	return &Genesis{
+		Config:     params.ChiadoChainConfig,
+		Timestamp:  0,
+		AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   0x989680,
+		Difficulty: big.NewInt(0x20000),
+		Alloc:      readPrealloc("allocs/chiado.json"),
 	}
 }
 
