@@ -2,9 +2,11 @@ on:
   push:
     branches:
       - master
+      - 'release-*'
   pull_request:
     branches:
       - master
+      - 'release-*'
   workflow_dispatch:
 
 # Free runner capacity by cancelling superseded PR runs.
@@ -15,7 +17,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: [self-hosted-ghr, size-s-x64]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
       with:
@@ -33,8 +35,12 @@ jobs:
         go-version: 1.25
         cache: false
 
+    - name: Build abigen
+      run: go build -o ./build/bin/abigen ./cmd/abigen
+
     - name: Run linters
       run: |
+        export PATH="$PWD/build/bin:$PATH"
         go run build/ci.go lint
         go run build/ci.go check_generate
         go run build/ci.go check_baddeps
@@ -42,7 +48,7 @@ jobs:
   keeper:
     name: Keeper Builds
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,7 +66,7 @@ jobs:
   test-32bit:
     name: "32bit tests"
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,12 +84,12 @@ jobs:
           sudo apt-get -yq --no-install-suggests --no-install-recommends install gcc-multilib
 
       - name: Build
-        run: go run build/ci.go test -arch 386 -short -p 8
+        run: go run build/ci.go test -arch 386 -short
 
   test:
     name: Test
     needs: lint
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         go:
@@ -101,45 +107,4 @@ jobs:
           cache: false
 
       - name: Run tests
-        run: go run build/ci.go test -p 8
-
-  windows:
-    name: Windows ${{ matrix.arch }}
-    needs: lint
-    runs-on: [self-hosted, windows, x64]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            mingw: 'C:\msys64\mingw64'
-            test: true
-          - arch: '386'
-            mingw: 'C:\msys64\mingw32'
-            test: false
-    env:
-      GETH_MINGW: ${{ matrix.mingw }}
-      GETH_CC: ${{ matrix.mingw }}\bin\gcc.exe
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - name: Build
-        shell: cmd
-        run: |
-          set PATH=%GETH_MINGW%\bin;%PATH%
-          go run build/ci.go install -arch ${{ matrix.arch }} -cc %GETH_CC%
-
-      - name: Run tests
-        if: matrix.test
-        shell: cmd
-        run: |
-          set PATH=%GETH_MINGW%\bin;%PATH%
-          go run build/ci.go test -arch ${{ matrix.arch }} -cc %GETH_CC% -short -p 8
+        run: go run build/ci.go test

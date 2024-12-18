@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
@@ -1445,5 +1446,49 @@ func TestStateDBCopyUBT(t *testing.T) {
 	}
 	if got, want := cpy.GetBalance(addr), uint256.NewInt(2_000); got.Cmp(want) != 0 {
 		t.Fatalf("copy balance did not update: got %s, want %s", got, want)
+	}
+}
+
+// TestSystemAddressPreservedOnCommit verifies that the SystemAddress is not
+// deleted when committing with deleteEmptyObjects=true, even though it is
+// empty. Regular empty accounts should still be deleted. This is required for
+// Gnosis AuRa consensus which uses the SystemAddress for system calls.
+func TestSystemAddressPreservedOnCommit(t *testing.T) {
+	db := NewDatabaseForTesting()
+	state, _ := New(types.EmptyRootHash, db)
+
+	regularAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	// Touch both accounts so they exist in state as empty objects.
+	state.CreateAccount(regularAddr)
+	state.CreateAccount(params.SystemAddress)
+
+	// Sanity: both should exist before commit.
+	if !state.Exist(regularAddr) {
+		t.Fatal("regular account should exist before commit")
+	}
+	if !state.Exist(params.SystemAddress) {
+		t.Fatal("SystemAddress should exist before commit")
+	}
+
+	// Commit with deleteEmptyObjects = true.
+	root, err := state.Commit(0, true, false)
+	if err != nil {
+		t.Fatalf("commit failed: %v", err)
+	}
+
+	// Reload state from the committed root.
+	state, err = New(root, db)
+	if err != nil {
+		t.Fatalf("failed to reopen state: %v", err)
+	}
+
+	// Regular empty account must be gone.
+	if state.Exist(regularAddr) {
+		t.Fatal("empty regular account should have been deleted")
+	}
+	// SystemAddress must survive.
+	if !state.Exist(params.SystemAddress) {
+		t.Fatal("SystemAddress should NOT be deleted even when empty")
 	}
 }

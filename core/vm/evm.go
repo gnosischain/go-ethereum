@@ -18,6 +18,7 @@ package vm
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"sync/atomic"
 
@@ -484,7 +485,7 @@ func (evm *EVM) StaticCall(caller common.Address, addr common.Address, input []b
 }
 
 // create creates a new contract using code as deployment code.
-func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int, address common.Address, typ OpCode) (ret []byte, createAddress common.Address, result GasBudget, err error) {
+func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int, address common.Address, typ OpCode, incrementSenderNonce bool) (ret []byte, createAddress common.Address, result GasBudget, err error) {
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
 	var nonce uint64
@@ -507,8 +508,9 @@ func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value 
 	if err != nil {
 		return nil, common.Address{}, gas, err
 	}
-	// Increment the caller's nonce after passing all validations
-	evm.StateDB.SetNonce(caller, nonce+1, tracing.NonceChangeContractCreator)
+	if incrementSenderNonce {
+		evm.StateDB.SetNonce(caller, nonce+1, tracing.NonceChangeContractCreator)
+	}
 	reservoir := gas.StateGas
 
 	// Charge the contract creation init gas in verkle mode
@@ -570,8 +572,10 @@ func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value 
 	// acts inside that account.
 	evm.StateDB.CreateContract(address)
 
-	if evm.chainRules.IsEIP158 {
-		evm.StateDB.SetNonce(address, 1, tracing.NonceChangeNewContract)
+	// On gnosis chains, this is activated as part of SpuriousDragon in
+	// spite of being part of eip 161.
+	if evm.chainRules.IsEIP155 {
+		evm.StateDB.SetNonce(address, 1, tracing.NonceChangeContractCreator)
 	}
 	// Charge the contract creation init gas in verkle mode
 	if evm.chainRules.IsEIP4762 {
@@ -657,8 +661,11 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address) ([]b
 		if !contract.chargeRegular(createDataCost, evm.Config.Tracer, tracing.GasChangeCallCodeStorage) {
 			return ret, ErrCodeStoreOutOfGas
 		}
-		if err := CheckMaxCodeSize(&evm.chainRules, uint64(len(ret))); err != nil {
-			return ret, err
+		// Gnosis activates EIP-170 at Shapella rather than Spurious Dragon.
+		if evm.chainRules.IsShanghai {
+			if err := CheckMaxCodeSize(&evm.chainRules, uint64(len(ret))); err != nil {
+				return ret, err
+			}
 		}
 	}
 	if len(ret) > 0 {
@@ -670,7 +677,7 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address) ([]b
 // Create creates a new contract using code as deployment code.
 func (evm *EVM) Create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int) (ret []byte, contractAddr common.Address, result GasBudget, err error) {
 	contractAddr = crypto.CreateAddress(caller, evm.StateDB.GetNonce(caller))
-	return evm.create(caller, code, gas, value, contractAddr, CREATE)
+	return evm.create(caller, code, gas, value, contractAddr, CREATE, true)
 }
 
 // Create2 creates a new contract using code as deployment code.
@@ -680,7 +687,7 @@ func (evm *EVM) Create(caller common.Address, code []byte, gas GasBudget, value 
 func (evm *EVM) Create2(caller common.Address, code []byte, gas GasBudget, endowment *uint256.Int, salt *uint256.Int) (ret []byte, contractAddr common.Address, result GasBudget, err error) {
 	inithash := crypto.Keccak256Hash(code)
 	contractAddr = crypto.CreateAddress2(caller, salt.Bytes32(), inithash[:])
-	return evm.create(caller, code, gas, endowment, contractAddr, CREATE2)
+	return evm.create(caller, code, gas, endowment, contractAddr, CREATE2, true)
 }
 
 // resolveCode returns the code associated with the provided account. After
@@ -758,4 +765,9 @@ func (evm *EVM) GetVMContext() *tracing.VMContext {
 // GetRules returns the chain rules used throughout the EVM execution.
 func (evm *EVM) GetRules() params.Rules {
 	return evm.chainRules
+}
+
+func (evm *EVM) SysCreate(caller common.Address, code []byte, endowment *uint256.Int, contractAddr common.Address) (ret []byte, err error) {
+	ret, _, _, err = evm.create(caller, code, NewGasBudget(math.MaxUint64, 0), endowment, contractAddr, CREATE, false /* incrementNonce */)
+	return
 }

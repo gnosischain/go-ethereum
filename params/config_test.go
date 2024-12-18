@@ -155,3 +155,43 @@ func TestTimestampCompatError(t *testing.T) {
 	require.Equal(t, newTimestampCompatError(errWhat, newUint64(0), newUint64(1681338455)).Error(),
 		"mismatching Shanghai fork timestamp in database (have timestamp 0, want timestamp 1681338455, rewindto timestamp 0)")
 }
+
+func TestBlobParamGetters(t *testing.T) {
+	t.Run("nil ChainConfig returns defaults", func(t *testing.T) {
+		var cfg *ChainConfig
+		if got := cfg.GetMinBlobGasPrice(); got != DefaultBlobTxMinBlobGasprice {
+			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, DefaultBlobTxMinBlobGasprice)
+		}
+		if got := cfg.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
+			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, DefaultBlobTxMaxBlobs)
+		}
+	})
+
+	t.Run("no overrides returns defaults", func(t *testing.T) {
+		cfg := &ChainConfig{}
+		if got := cfg.GetMinBlobGasPrice(); got != DefaultBlobTxMinBlobGasprice {
+			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, DefaultBlobTxMinBlobGasprice)
+		}
+		if got := cfg.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
+			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, DefaultBlobTxMaxBlobs)
+		}
+	})
+
+	t.Run("gnosis chainspec json loads correct blob params", func(t *testing.T) {
+		if got := GnosisChainConfig.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
+			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, GnosisBlobTxMinBlobGasprice)
+		}
+		if got := GnosisChainConfig.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
+			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, GnosisBlobTxMaxBlobs)
+		}
+	})
+
+	t.Run("chiado chainspec json loads correct blob params", func(t *testing.T) {
+		if got := ChiadoChainConfig.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
+			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, GnosisBlobTxMinBlobGasprice)
+		}
+		if got := ChiadoChainConfig.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
+			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, GnosisBlobTxMaxBlobs)
+		}
+	})
+}

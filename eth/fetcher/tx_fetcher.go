@@ -394,10 +394,6 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 		if violation != nil {
 			break
 		}
-		// If we encountered a protocol violation, disconnect this peer.
-		if violation != nil {
-			break
-		}
 	}
 	select {
 	case f.cleanup <- &txDelivery{origin: peer, hashes: added, metas: metas, direct: direct, violation: violation}:

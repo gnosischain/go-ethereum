@@ -821,7 +821,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) *bal.ConstructionBlockAccess
 			// finalise or delete, so ignore it here.
 			continue
 		}
-		if obj.selfDestructed || (deleteEmptyObjects && obj.empty()) {
+		if obj.selfDestructed || (deleteEmptyObjects && obj.empty() && obj.address != params.SystemAddress) {
 			delete(s.stateObjects, obj.address)
 			s.markDelete(addr)
 
