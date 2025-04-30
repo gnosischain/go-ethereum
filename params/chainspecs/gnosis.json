@@ -29,6 +29,7 @@
       "baseFeeUpdateFraction": 1112826
     }
   },
+  "depositContractAddress": "0x0B98057eA310F4d31F2a452B414647007d1645d9",
   "aura": {
     "stepDuration": 5,
     "blockReward": 0,
