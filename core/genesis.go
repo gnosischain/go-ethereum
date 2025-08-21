@@ -296,6 +296,10 @@ func getGenesisState(db ethdb.Database, blockhash common.Hash) (alloc types.Gene
 		genesis = DefaultHoleskyGenesisBlock()
 	case params.HoodiGenesisHash:
 		genesis = DefaultHoodiGenesisBlock()
+	case params.GnosisGenesisHash:
+		genesis = DefaultGnosisGenesisBlock()
+	case params.ChiadoGenesisHash:
+		genesis = DefaultChiadoGenesisBlock()
 	}
 	if genesis != nil {
 		return genesis.Alloc, nil
@@ -722,24 +726,7 @@ func DefaultHoodiGenesisBlock() *Genesis {
 	}
 }
 
-//go:embed allocs
-var allocs embed.FS
-
-func readPrealloc(filename string) GenesisAlloc {
-	f, err := allocs.Open(filename)
-	if err != nil {
-		panic(fmt.Sprintf("Could not open genesis preallocation for %s: %v", filename, err))
-	}
-	defer f.Close()
-	decoder := json.NewDecoder(f)
-	ga := make(GenesisAlloc)
-	err = decoder.Decode(&ga)
-	if err != nil {
-		panic(fmt.Sprintf("Could not parse genesis preallocation for %s: %v", filename, err))
-	}
-	return ga
-}
-
+// DefaultGnosisGenesisBlock returns the Gnosis network genesis block.
 func DefaultGnosisGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.GnosisChainConfig,
@@ -751,6 +738,7 @@ func DefaultGnosisGenesisBlock() *Genesis {
 	}
 }
 
+// DefaultChiadoGenesisBlock returns the Chiado network genesis block.
 func DefaultChiadoGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.ChiadoChainConfig,
@@ -802,6 +790,24 @@ func DeveloperGenesisBlock(gasLimit uint64, faucet *common.Address) *Genesis {
 		genesis.Alloc[*faucet] = types.Account{Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))}
 	}
 	return genesis
+}
+
+//go:embed allocs
+var allocs embed.FS
+
+func readPrealloc(filename string) GenesisAlloc {
+	f, err := allocs.Open(filename)
+	if err != nil {
+		panic(fmt.Sprintf("Could not open genesis preallocation for %s: %v", filename, err))
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	ga := make(GenesisAlloc)
+	err = decoder.Decode(&ga)
+	if err != nil {
+		panic(fmt.Sprintf("Could not parse genesis preallocation for %s: %v", filename, err))
+	}
+	return ga
 }
 
 func decodePrealloc(data string) types.GenesisAlloc {
