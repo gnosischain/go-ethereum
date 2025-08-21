@@ -569,12 +569,14 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		// Move the remainder to the eip1559 fee collector
 		if rules.IsLondon {
 			if !msg.IsFree() {
-				burntContractAddress := *st.evm.ChainConfig().Aura.Eip1559FeeCollector
-				burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(st.gasUsed()), uint256.MustFromBig(st.evm.Context.BaseFee))
-				st.state.AddBalance(burntContractAddress, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
-				if rules.IsPrague && st.evm.Context.BlobBaseFee != nil {
-					blobfee := uint256.NewInt(st.blobGasUsed() * st.evm.Context.BlobBaseFee.Uint64())
-					st.state.AddBalance(burntContractAddress, blobfee, tracing.BalanceChangeUnspecified)
+				if st.evm.ChainConfig().Aura != nil && st.evm.ChainConfig().Aura.Eip1559FeeCollector != nil {
+					burntContractAddress := *st.evm.ChainConfig().Aura.Eip1559FeeCollector
+					burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(st.gasUsed()), uint256.MustFromBig(st.evm.Context.BaseFee))
+					st.state.AddBalance(burntContractAddress, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
+					if rules.IsPrague && st.evm.Context.BlobBaseFee != nil {
+						blobfee := uint256.NewInt(st.blobGasUsed() * st.evm.Context.BlobBaseFee.Uint64())
+						st.state.AddBalance(burntContractAddress, blobfee, tracing.BalanceChangeUnspecified)
+					}
 				}
 			}
 		}
