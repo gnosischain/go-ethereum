@@ -236,6 +236,10 @@ func ethFilter(args []string) (nodeFilter, error) {
 		filter = forkid.NewStaticFilter(params.HoleskyChainConfig, core.DefaultHoleskyGenesisBlock().ToBlock())
 	case "hoodi":
 		filter = forkid.NewStaticFilter(params.HoodiChainConfig, core.DefaultHoodiGenesisBlock().ToBlock())
+	case "gnosis":
+		filter = forkid.NewStaticFilter(params.GnosisChainConfig, core.DefaultGnosisGenesisBlock().ToBlock())
+	case "chiado":
+		filter = forkid.NewStaticFilter(params.ChiadoChainConfig, core.DefaultChiadoGenesisBlock().ToBlock())
 	default:
 		return nil, fmt.Errorf("unknown network %q", args[0])
 	}

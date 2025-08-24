@@ -296,6 +296,10 @@ func getGenesisState(db ethdb.Database, blockhash common.Hash) (alloc types.Gene
 		genesis = DefaultHoleskyGenesisBlock()
 	case params.HoodiGenesisHash:
 		genesis = DefaultHoodiGenesisBlock()
+	case params.GnosisGenesisHash:
+		genesis = DefaultGnosisGenesisBlock()
+	case params.ChiadoGenesisHash:
+		genesis = DefaultChiadoGenesisBlock()
 	}
 	if genesis != nil {
 		return genesis.Alloc, nil
@@ -740,6 +744,7 @@ func readPrealloc(filename string) GenesisAlloc {
 	return ga
 }
 
+// DefaultGnosisGenesisBlock returns the Gnosis network genesis block.
 func DefaultGnosisGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.GnosisChainConfig,
@@ -751,6 +756,7 @@ func DefaultGnosisGenesisBlock() *Genesis {
 	}
 }
 
+// DefaultChiadoGenesisBlock returns the Chiado network genesis block.
 func DefaultChiadoGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.ChiadoChainConfig,
