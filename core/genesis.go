@@ -240,7 +240,6 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database) (common.Hash, e
 			// already captures the allocations.
 			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
 		}
-		log.Info("adding account", "addr", addr, "constructor", account.Constructor, "code", account.Code)
 		if len(account.Constructor) != 0 {
 			// hardcode chiado since this is the only use case we have for the time being.
 			// things could be cleaner, but it would increase the diff with geth.
@@ -555,6 +554,12 @@ func (g *Genesis) toBlockWithRoot(root common.Hash) *types.Block {
 		Coinbase:   g.Coinbase,
 		Signature:  g.AuRaSeal,
 		Root:       root,
+	}
+
+	// If this is an Aura chain but AuRaSeal is not provided or empty,
+	// set it to 65 zero bytes to ensure proper RLP encoding
+	if g.Config != nil && g.Config.Aura != nil && len(head.Signature) == 0 {
+		head.Signature = make([]byte, 65)
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
