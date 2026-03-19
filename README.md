@@ -53,9 +53,12 @@ Service transactions are special transaction types on the Gnosis chain that can 
 - [ ] Osaka (Chiado testnet timestamp set)
 
 
-## Building
+## Building the source
 
-Requires Go 1.23+ and a C compiler.
+For prerequisites and detailed build instructions please read the [Installation Instructions](https://geth.ethereum.org/docs/getting-started/installing-geth).
+
+Building `geth` requires both a Go (version 1.23 or later) and a C compiler. You can install
+them using your favourite package manager. Once the dependencies are installed, run
 
 ```shell
 make geth
@@ -146,7 +149,7 @@ Specifying the `--chiado` flag, however, will reconfigure your `geth` instance a
  * Instead of connecting to the Gnosis mainnet, the client will connect to the Chiado
    test network, which uses different P2P bootnodes, different network IDs and genesis
    states.
- * Instead of using the default data directory (`~/.ethereum` on Linux for example), `geth`
+ * Instead of using the default data directory (`~/.ethereum/gnosis` on Linux for example), `geth`
    will nest itself one level deeper into a `chiado` subfolder (`~/.ethereum/chiado` on
    Linux). Note, on OSX and Linux this also means that attaching to a running testnet node
    requires the use of a custom endpoint since `geth attach` will try to attach to a
