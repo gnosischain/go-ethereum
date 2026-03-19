@@ -1,6 +1,6 @@
 ## Go Ethereum
 
-Golang execution layer implementation of the Ethereum protocol.
+This fork of go-ethereum runs the Golang execution layer implementation of the Ethereum protocol for Gnosis chains.
 
 [![API Reference](
 https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
@@ -10,15 +10,52 @@ https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/nthXNEv)
 [![Twitter](https://img.shields.io/twitter/follow/go_ethereum)](https://x.com/go_ethereum)
 
-Automated builds are available for stable releases and the unstable master branch. Binary
-archives are published at https://geth.ethereum.org/downloads/.
+## How This Fork Differs from Upstream
 
-## Building the source
+Gnosis differs from the standard Ethereum protocol in a few key ways.
 
-For prerequisites and detailed build instructions please read the [Installation Instructions](https://geth.ethereum.org/docs/getting-started/installing-geth).
+### Consensus
 
-Building `geth` requires both a Go (version 1.23 or later) and a C compiler. You can install
-them using your favourite package manager. Once the dependencies are installed, run
+Pre-Merge:
+- Gnosis runs AuRa as the consensus engine. The AuRa engine lives in [consensus/aura](./consensus/aura). The AuRa consensus engine still supports syncing from genesis and can process pre-merge blocks.
+
+Post-Merge:
+- Gnosis runs a beacon chain in the same way as Ethereum using `GNO` as the staking token. 
+However, AuRa is still wrapped by `Beacon` in order to handle rewards and withdrwals with Gnosis-specific logic.
+
+### Fees
+
+Fees are **not** burned as the fee token is xDAI on Gnosis and will be collected to a contract and distributed rather than being burned.
+
+### Syscalls and Service Transactions
+
+Gnosis supports syscalls to system-level contracts defined here: [posdao-contracts](https://github.com/poanetwork/posdao-contracts/tree/master/contracts).
+
+Service transactions are special transaction types on the Gnosis chain that can be submitted without paying for gas.
+
+## Important Files
+
+- [consensus/aura](./consensus/aura/): Contains the AuRa engine that provides pre-merge consensus and handles post-merge block rewards and withdrawals
+- [core/state_processor.go](./core/state_processor.go): Handles AuRa syscalls and service transactions
+- params: Contains the gnosis [chainspecs](./params/chainspecs/) for Gnosis mainnet and Chiado testnet along.
+
+
+## Implementation
+
+- [x] AuRa (Authority Round) consensus engine — full pre-merge validation + post-merge contract duties
+- [x] [EIP-1559 modifications](https://github.com/gnosischain/specs/blob/master/network-upgrades/london.md) — base fees collected to contract instead of burned (xDAI is bridged)
+- [x] [Post-merge POSDAO](https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md) — block rewards via contract syscall
+- [x] [Gnosis withdrawals](https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md) — routed through withdrawal contract
+- [x] [EIP-4844-pectra](https://github.com/gnosischain/specs/blob/master/network-upgrades/pectra.md) — custom blob schedule (target 1, max 2)
+- [x] Service transactions — zero-gas-price txs from certified senders
+- [x] Bytecode rewriting — protocol-level contract code replacement (block-number and timestamp triggered)
+- [x] Balancer hardfork
+- [ ] Osaka (Chiado testnet timestamp set)
+
+
+## Building
+
+Requires Go 1.23+ and a C compiler.
 
 ```shell
 make geth
