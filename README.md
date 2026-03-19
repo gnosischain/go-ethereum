@@ -37,7 +37,7 @@ Service transactions are special transaction types on the Gnosis chain that can 
 
 - [consensus/aura](./consensus/aura/): Contains the AuRa engine that provides pre-merge consensus and handles post-merge block rewards and withdrawals
 - [core/state_processor.go](./core/state_processor.go): Handles AuRa syscalls and service transactions
-- [params](./params/): Contains the gnosis [chainspecs](./params/chainspecs/) for Gnosis mainnet and Chiado testnet along.
+- [params](./params/): Contains the gnosis [chainspecs](./params/chainspecs/) for Gnosis mainnet and Chiado testnet.
 
 
 ## Implementation
