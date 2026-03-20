@@ -121,19 +121,17 @@ For a more detailed walkthrough on running a full node of the Gnosis Chain, plea
 
 #### Docker quick start
 
-One of the quickest ways to get Ethereum up and running on your machine is by using
+One of the quickest ways to get a Gnosis node up and running on your machine is by using
 Docker:
 
 ```shell
-docker run -d --name ethereum-node -v /Users/alice/ethereum:/root \
+docker run -d --name gnosis-node -v /Users/alice/gnosis:/root \
            -p 8545:8545 -p 30303:30303 \
-           ethereum/client-go
+           ghcr.io/gnosischain/geth:latest --gnosis --authrpc.jwtsecret /root/jwt.hex
 ```
 
-This will start `geth` in snap-sync mode with a DB memory allowance of 1GB, as the
-above command does.  It will also create a persistent volume in your home directory for
-saving your blockchain as well as map the default ports. There is also an `alpine` tag
-available for a slim version of the image.
+This will start `geth` in snap-sync mode on Gnosis mainnet. It will also create a persistent
+volume in your home directory for saving your blockchain as well as map the default ports.
 
 Do not forget `--http.addr 0.0.0.0`, if you want to access RPC from other containers
 and/or hosts. By default, `geth` binds to the local interface and RPC endpoints are not
