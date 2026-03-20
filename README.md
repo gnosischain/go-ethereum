@@ -107,77 +107,17 @@ Recommended:
 * High-performance SSD with at least 1TB of free space
 * 25+ MBit/sec download Internet service
 
-### Full node on the Gnosis mainnet
-
-By far the most common scenario is people wanting to simply interact with the Gnosis
-network: create accounts; transfer funds; deploy and interact with contracts. For this
-particular use case, the user doesn't care about years-old historical data, so we can
-sync quickly to the current state of the network. To do so:
+### Running a node
 
 ```shell
-$ geth --gnosis console
+# Gnosis Mainnet
+> geth --gnosis --authrpc.jwtsecret /path/to/jwt.hex
+
+# Chiado Testnet
+> geth --chiado --authrpc.jwtsecret /path/to/jwt.hex
 ```
 
-This command will:
- * Start `geth` in snap sync mode (default, can be changed with the `--syncmode` flag),
-   causing it to download more data in exchange for avoiding processing the entire history
-   of the Gnosis network, which is very CPU intensive.
- * Start the built-in interactive [JavaScript console](https://geth.ethereum.org/docs/interacting-with-geth/javascript-console),
-   (via the trailing `console` subcommand) through which you can interact using [`web3` methods](https://github.com/ChainSafe/web3.js/blob/0.20.7/DOCUMENTATION.md)
-   (note: the `web3` version bundled within `geth` is very old, and not up to date with official docs),
-   as well as `geth`'s own [management APIs](https://geth.ethereum.org/docs/interacting-with-geth/rpc).
-   This tool is optional and if you leave it out you can always attach it to an already running
-   `geth` instance with `geth attach`.
-
-### A Full node on the Chiado test network
-
-Transitioning towards developers, if you'd like to play around with creating Gnosis
-contracts, you almost certainly would like to do that without any real money involved until
-you get the hang of the entire system. In other words, instead of attaching to the main
-network, you want to join the **test** network with your node, which is fully equivalent to
-the main network, but with play-xDAI only.
-
-```shell
-$ geth --chiado console
-```
-
-The `console` subcommand has the same meaning as above and is equally
-useful on the testnet too.
-
-Specifying the `--chiado` flag, however, will reconfigure your `geth` instance a bit:
-
- * Instead of connecting to the Gnosis mainnet, the client will connect to the Chiado
-   test network, which uses different P2P bootnodes, different network IDs and genesis
-   states.
- * Instead of using the default data directory (`~/.ethereum/gnosis` on Linux for example), `geth`
-   will nest itself one level deeper into a `chiado` subfolder (`~/.ethereum/chiado` on
-   Linux). Note, on OSX and Linux this also means that attaching to a running testnet node
-   requires the use of a custom endpoint since `geth attach` will try to attach to a
-   production node endpoint by default, e.g.,
-   `geth attach <datadir>/chiado/geth.ipc`. Windows users are not affected by
-   this.
-
-*Note: Although some internal protective measures prevent transactions from
-crossing over between the main network and test network, you should always
-use separate accounts for play and real money. Unless you manually move
-accounts, `geth` will by default correctly separate the two networks and will not make any
-accounts available between them.*
-
-### Configuration
-
-As an alternative to passing the numerous flags to the `geth` binary, you can also pass a
-configuration file via:
-
-```shell
-$ geth --config /path/to/your_config.toml
-```
-
-To get an idea of how the file should look like you can use the `dumpconfig` subcommand to
-export your existing configuration:
-
-```shell
-$ geth --your-favourite-flags dumpconfig
-```
+For a more detailed walkthrough on running a full node of the Gnosis Chain, please refer to the [interactive guide](https://docs.gnosischain.com/node/manual/).
 
 #### Docker quick start
 
