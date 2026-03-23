@@ -339,6 +339,7 @@ func NewAuRa(spec *params.AuRaConfig, db ethdb.KeyValueStore) (*AuRa, error) {
 	}
 	durations = append(durations, durInfo)
 	times := SortedKeys(auraParams.StepDurations)
+	// NOTE: unreachable block with FromJSON
 	for i := 1; i < len(auraParams.StepDurations); i++ { // skip first
 		time := times[i]
 		dur := auraParams.StepDurations[time]

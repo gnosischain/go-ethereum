@@ -1,18 +1,20 @@
-package aura_test
+package aura
 
-// import (
-// 	"testing"
+import (
+	"math"
+	"math/big"
+	"strings"
+	"testing"
+	"time"
 
-// 	"github.com/stretchr/testify/require"
-
-// 	"github.com/ethereum/go-ethereum-lib/kv/memdb"
-// 	libcommon "github.com/ethereum/go-ethereum/common"
-
-// 	"github.com/ethereum/go-ethereum/consensus/aura"
-// 	"github.com/ethereum/go-ethereum/core"
-// 	"github.com/ethereum/go-ethereum/core/types"
-// 	"github.com/ethereum/go-ethereum/trie"
-// )
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 // Check that the first block of Gnosis Chain, which doesn't have any transactions,
 // does not change the state root.
@@ -54,3 +56,289 @@ package aura_test
 // 	err = m.InsertChain(chain)
 // 	require.NoError(err)
 // }
+
+// --- VerifyHeader tests ---
+
+// mockChainHeaderReader is a minimal implementation of consensus.ChainHeaderReader for testing.
+type mockChainHeaderReader struct {
+	config  *params.ChainConfig
+	headers map[common.Hash]*types.Header
+}
+
+func (m *mockChainHeaderReader) Config() *params.ChainConfig  { return m.config }
+func (m *mockChainHeaderReader) CurrentHeader() *types.Header { return nil }
+func (m *mockChainHeaderReader) GetHeader(hash common.Hash, _ uint64) *types.Header {
+	if m.headers != nil {
+		return m.headers[hash]
+	}
+	return nil
+}
+func (m *mockChainHeaderReader) GetHeaderByNumber(_ uint64) *types.Header { return nil }
+func (m *mockChainHeaderReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	if m.headers != nil {
+		return m.headers[hash]
+	}
+	return nil
+}
+
+// newTestChainReader returns a ChainHeaderReader with no DAO fork (avoids extra-data DAO checks).
+func newTestChainReader() *mockChainHeaderReader {
+	return &mockChainHeaderReader{
+		config: &params.ChainConfig{
+			ChainID:        big.NewInt(100), // Gnosis chain ID
+			DAOForkSupport: true,
+		},
+	}
+}
+
+func newTestAuRa() *AuRa {
+	step := &Step{
+		calibrate: false,
+		durations: []StepDurationInfo{{TransitionStep: 0, TransitionTimestamp: 0, StepDuration: 5}},
+	}
+	step.inner.Store(100)
+	return &AuRa{
+		step:         PermissionedStep{inner: step},
+		cfg:          AuthorityRoundParams{},
+		EpochManager: NewEpochManager(),
+	}
+}
+
+func validHeader() *types.Header {
+	return &types.Header{
+		Number:   big.NewInt(1),
+		Time:     uint64(time.Now().Unix()),
+		Extra:    []byte{},
+		GasLimit: 10_000_000,
+		GasUsed:  5_000_000,
+	}
+}
+
+func TestVerifyHeader(t *testing.T) {
+	engine := newTestAuRa()
+	chain := newTestChainReader()
+
+	ptrHash := func(h common.Hash) *common.Hash { return &h }
+	ptrUint64 := func(v uint64) *uint64 { return &v }
+
+	tests := []struct {
+		name    string
+		modify  func(h *types.Header)
+		wantErr string // "" means no error expected
+	}{
+		{
+			name:   "valid header",
+			modify: func(h *types.Header) {},
+		},
+		{
+			name:    "extra-data too long",
+			modify:  func(h *types.Header) { h.Extra = make([]byte, params.MaximumExtraDataSize+1) },
+			wantErr: "extra-data too long",
+		},
+		{
+			name:    "future timestamp",
+			modify:  func(h *types.Header) { h.Time = uint64(time.Now().Unix()) + 60 },
+			wantErr: "future",
+		},
+		{
+			name:   "timestamp at allowed boundary",
+			modify: func(h *types.Header) { h.Time = uint64(time.Now().Unix()) + 14 },
+		},
+		{
+			name:    "gas limit too high",
+			modify:  func(h *types.Header) { h.GasLimit = params.MaxGasLimit + 1 },
+			wantErr: "invalid gasLimit",
+		},
+		{
+			name: "gasUsed exceeds gasLimit",
+			modify: func(h *types.Header) {
+				h.GasLimit = 10_000_000
+				h.GasUsed = 10_000_001
+			},
+			wantErr: "invalid gasUsed",
+		},
+		{
+			name: "gasUsed equals gasLimit",
+			modify: func(h *types.Header) {
+				h.GasLimit = 10_000_000
+				h.GasUsed = 10_000_000
+			},
+			wantErr: "", // pass
+		},
+		{
+			name:    "withdrawalsHash present",
+			modify:  func(h *types.Header) { h.WithdrawalsHash = ptrHash(common.Hash{1}) },
+			wantErr: "invalid withdrawalsHash",
+		},
+		{
+			name:    "excessBlobGas present",
+			modify:  func(h *types.Header) { h.ExcessBlobGas = ptrUint64(1) },
+			wantErr: "invalid excessBlobGas",
+		},
+		{
+			name:    "blobGasUsed present",
+			modify:  func(h *types.Header) { h.BlobGasUsed = ptrUint64(1) },
+			wantErr: "invalid blobGasUsed",
+		},
+		{
+			name:    "parentBeaconRoot present",
+			modify:  func(h *types.Header) { h.ParentBeaconRoot = ptrHash(common.Hash{1}) },
+			wantErr: "invalid parentBeaconRoot",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := validHeader()
+			tt.modify(h)
+			err := engine.VerifyHeader(chain, h)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("error %q does not contain %q", err, tt.wantErr)
+				}
+			}
+		})
+	}
+}
+
+// --- NewAuRa tests ---
+
+func minimalAuRaConfig() *params.AuRaConfig {
+	stepDuration := uint64(5)
+	blockReward := uint64(0)
+	return &params.AuRaConfig{
+		StepDuration: &stepDuration,
+		BlockReward:  &blockReward,
+		Validators: &params.ValidatorSetJson{
+			List: []common.Address{{1}},
+		},
+	}
+}
+
+func TestNewAuRa(t *testing.T) {
+	t.Run("MinimalValidConfig", func(t *testing.T) {
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(minimalAuRaConfig(), db)
+		require.NoError(t, err)
+		assert.NotNil(t, engine)
+		assert.NotNil(t, engine.EpochManager)
+		assert.True(t, engine.step.canPropose.Load())
+	})
+
+	t.Run("GnosisMainnetConfig", func(t *testing.T) {
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(params.GnosisChainConfig.Aura, db)
+		require.NoError(t, err)
+		assert.NotNil(t, engine)
+	})
+
+	t.Run("MissingStepDuration", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		cfg.StepDuration = nil // step 0 duration will be missing
+		db := rawdb.NewMemoryDatabase()
+		_, err := NewAuRa(cfg, db)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "step 0 duration is undefined")
+	})
+
+	t.Run("ZeroStepDuration", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		zero := uint64(0)
+		cfg.StepDuration = &zero
+		db := rawdb.NewMemoryDatabase()
+		_, err := NewAuRa(cfg, db)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "step duration cannot be 0")
+	})
+
+	t.Run("WithStartStep", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		startStep := uint64(42)
+		cfg.StartStep = &startStep
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(cfg, db)
+		require.NoError(t, err)
+		// When StartStep is set, calibrate is false and the step is the given value
+		assert.Equal(t, uint64(42), engine.step.inner.inner.Load())
+	})
+}
+
+// --- calculateScore tests ---
+
+func TestCalculateScore(t *testing.T) {
+	// score = maxU128 + parentStep - currentStep + currentEmptySteps
+	maxU128 := uint256.NewInt(0).SetAllOne()
+	maxU128 = maxU128.Rsh(maxU128, 128)
+
+	tests := []struct {
+		parentStep   uint64
+		currentStep  uint64
+		emptySteps   uint64
+		want         *uint256.Int
+		wantAboveMax bool // if true, just assert > maxU128 instead of exact match
+	}{
+		// basic: maxU128 + 10 - 11 + 0 = maxU128 - 1
+		{10, 11, 0, new(uint256.Int).Sub(maxU128, uint256.NewInt(1)), false},
+		// empty steps add to score: maxU128 + 10 - 11 + 5 = maxU128 + 4
+		{10, 11, 5, new(uint256.Int).Add(new(uint256.Int).Sub(maxU128, uint256.NewInt(1)), uint256.NewInt(5)), false},
+		// same step: score = maxU128
+		{5, 5, 0, new(uint256.Int).Set(maxU128), false},
+		// parentStep > currentStep: score > maxU128
+		{100, 50, 0, nil, true},
+		// large equal values: score = maxU128
+		{math.MaxUint64, math.MaxUint64, 0, new(uint256.Int).Set(maxU128), false},
+	}
+	for i, tt := range tests {
+		got := calculateScore(tt.parentStep, tt.currentStep, tt.emptySteps)
+		if tt.wantAboveMax {
+			if !got.Gt(maxU128) {
+				t.Errorf("test %d: expected score > maxU128, got %v", i, got)
+			}
+		} else if !got.Eq(tt.want) {
+			t.Errorf("test %d: score mismatch: have %v, want %v", i, got, tt.want)
+		}
+	}
+}
+
+// --- CalcDifficulty tests ---
+
+func TestCalcDifficulty(t *testing.T) {
+	t.Run("ReturnsNonZero", func(t *testing.T) {
+		engine := newTestAuRa()
+		parent := &types.Header{
+			Number: big.NewInt(1),
+			Step:   50,
+		}
+		diff := engine.CalcDifficulty(nil, 0, parent)
+		assert.NotNil(t, diff)
+		assert.True(t, diff.Sign() > 0)
+	})
+
+	t.Run("ConsistentWithCalculateScore", func(t *testing.T) {
+		engine := newTestAuRa()
+		// engine step is 100, parent step is 90
+		parent := &types.Header{
+			Number: big.NewInt(1),
+			Step:   90,
+		}
+		diff := engine.CalcDifficulty(nil, 0, parent)
+		expected := calculateScore(90, 100, 0)
+		assert.Equal(t, expected.ToBig(), diff)
+	})
+
+	t.Run("HigherParentStepYieldsHigherDifficulty", func(t *testing.T) {
+		engine := newTestAuRa()
+		parentLow := &types.Header{Number: big.NewInt(1), Step: 80}
+		parentHigh := &types.Header{Number: big.NewInt(1), Step: 95}
+		diffLow := engine.CalcDifficulty(nil, 0, parentLow)
+		diffHigh := engine.CalcDifficulty(nil, 0, parentHigh)
+		// Higher parent step (closer to current) means higher score
+		assert.True(t, diffHigh.Cmp(diffLow) > 0)
+	})
+}
