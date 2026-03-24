@@ -3,7 +3,6 @@ package aura
 import (
 	"math"
 	"math/big"
-	"strings"
 	"testing"
 	"time"
 
@@ -192,16 +191,10 @@ func TestVerifyHeader(t *testing.T) {
 			tt.modify(h)
 			err := engine.VerifyHeader(chain, h)
 			if tt.wantErr == "" {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				assert.NoError(t, err)
 			} else {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Errorf("error %q does not contain %q", err, tt.wantErr)
-				}
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
 			}
 		})
 	}
@@ -277,32 +270,53 @@ func TestCalculateScore(t *testing.T) {
 	maxU128 = maxU128.Rsh(maxU128, 128)
 
 	tests := []struct {
-		parentStep   uint64
-		currentStep  uint64
-		emptySteps   uint64
-		want         *uint256.Int
-		wantAboveMax bool // if true, just assert > maxU128 instead of exact match
+		name        string
+		parentStep  uint64
+		currentStep uint64
+		emptySteps  uint64
+		want        *uint256.Int
 	}{
-		// basic: maxU128 + 10 - 11 + 0 = maxU128 - 1
-		{10, 11, 0, new(uint256.Int).Sub(maxU128, uint256.NewInt(1)), false},
-		// empty steps add to score: maxU128 + 10 - 11 + 5 = maxU128 + 4
-		{10, 11, 5, new(uint256.Int).Add(new(uint256.Int).Sub(maxU128, uint256.NewInt(1)), uint256.NewInt(5)), false},
-		// same step: score = maxU128
-		{5, 5, 0, new(uint256.Int).Set(maxU128), false},
-		// parentStep > currentStep: score > maxU128
-		{100, 50, 0, nil, true},
-		// large equal values: score = maxU128
-		{math.MaxUint64, math.MaxUint64, 0, new(uint256.Int).Set(maxU128), false},
+		{
+			name:        "basic step increment",
+			parentStep:  10,
+			currentStep: 11,
+			emptySteps:  0,
+			want:        new(uint256.Int).Sub(new(uint256.Int).Set(maxU128), uint256.NewInt(1)),
+		},
+		{
+			name:        "empty steps add to score",
+			parentStep:  10,
+			currentStep: 11,
+			emptySteps:  5,
+			want:        new(uint256.Int).Add(new(uint256.Int).Sub(new(uint256.Int).Set(maxU128), uint256.NewInt(1)), uint256.NewInt(5)),
+		},
+		{
+			name:        "same step yields maxU128",
+			parentStep:  5,
+			currentStep: 5,
+			emptySteps:  0,
+			want:        new(uint256.Int).Set(maxU128),
+		},
+		{
+			name:        "parent step greater than current wraps above maxU128",
+			parentStep:  100,
+			currentStep: 50,
+			emptySteps:  0,
+			want:        new(uint256.Int).Add(new(uint256.Int).Set(maxU128), uint256.NewInt(50)),
+		},
+		{
+			name:        "large equal values yield maxU128",
+			parentStep:  math.MaxUint64,
+			currentStep: math.MaxUint64,
+			emptySteps:  0,
+			want:        new(uint256.Int).Set(maxU128),
+		},
 	}
-	for i, tt := range tests {
-		got := calculateScore(tt.parentStep, tt.currentStep, tt.emptySteps)
-		if tt.wantAboveMax {
-			if !got.Gt(maxU128) {
-				t.Errorf("test %d: expected score > maxU128, got %v", i, got)
-			}
-		} else if !got.Eq(tt.want) {
-			t.Errorf("test %d: score mismatch: have %v, want %v", i, got, tt.want)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateScore(tt.parentStep, tt.currentStep, tt.emptySteps)
+			assert.Equal(t, tt.want, got)
+		})
 	}
 }
 
