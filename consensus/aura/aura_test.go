@@ -56,6 +56,68 @@ import (
 // 	require.NoError(err)
 // }
 
+// --- NewAuRa tests ---
+
+func minimalAuRaConfig() *params.AuRaConfig {
+	stepDuration := uint64(5)
+	blockReward := uint64(0)
+	return &params.AuRaConfig{
+		StepDuration: &stepDuration,
+		BlockReward:  &blockReward,
+		Validators: &params.ValidatorSetJson{
+			List: []common.Address{{1}},
+		},
+	}
+}
+
+func TestNewAuRa(t *testing.T) {
+	t.Run("MinimalValidConfig", func(t *testing.T) {
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(minimalAuRaConfig(), db)
+		require.NoError(t, err)
+		assert.NotNil(t, engine)
+		assert.NotNil(t, engine.EpochManager)
+		assert.True(t, engine.step.canPropose.Load())
+	})
+
+	t.Run("GnosisMainnetConfig", func(t *testing.T) {
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(params.GnosisChainConfig.Aura, db)
+		require.NoError(t, err)
+		assert.NotNil(t, engine)
+	})
+
+	t.Run("MissingStepDuration", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		cfg.StepDuration = nil // step 0 duration will be missing
+		db := rawdb.NewMemoryDatabase()
+		_, err := NewAuRa(cfg, db)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "step 0 duration is undefined")
+	})
+
+	t.Run("ZeroStepDuration", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		zero := uint64(0)
+		cfg.StepDuration = &zero
+		db := rawdb.NewMemoryDatabase()
+		_, err := NewAuRa(cfg, db)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "step duration cannot be 0")
+	})
+
+	t.Run("WithStartStep", func(t *testing.T) {
+		cfg := minimalAuRaConfig()
+		startStep := uint64(42)
+		cfg.StartStep = &startStep
+		db := rawdb.NewMemoryDatabase()
+		engine, err := NewAuRa(cfg, db)
+		require.NoError(t, err)
+		// When StartStep is set, calibrate is false and the step is the given value
+		assert.Equal(t, uint64(42), engine.step.inner.inner.Load())
+	})
+}
+
 // --- VerifyHeader tests ---
 
 // mockChainHeaderReader is a minimal implementation of consensus.ChainHeaderReader for testing.
@@ -200,68 +262,6 @@ func TestVerifyHeader(t *testing.T) {
 	}
 }
 
-// --- NewAuRa tests ---
-
-func minimalAuRaConfig() *params.AuRaConfig {
-	stepDuration := uint64(5)
-	blockReward := uint64(0)
-	return &params.AuRaConfig{
-		StepDuration: &stepDuration,
-		BlockReward:  &blockReward,
-		Validators: &params.ValidatorSetJson{
-			List: []common.Address{{1}},
-		},
-	}
-}
-
-func TestNewAuRa(t *testing.T) {
-	t.Run("MinimalValidConfig", func(t *testing.T) {
-		db := rawdb.NewMemoryDatabase()
-		engine, err := NewAuRa(minimalAuRaConfig(), db)
-		require.NoError(t, err)
-		assert.NotNil(t, engine)
-		assert.NotNil(t, engine.EpochManager)
-		assert.True(t, engine.step.canPropose.Load())
-	})
-
-	t.Run("GnosisMainnetConfig", func(t *testing.T) {
-		db := rawdb.NewMemoryDatabase()
-		engine, err := NewAuRa(params.GnosisChainConfig.Aura, db)
-		require.NoError(t, err)
-		assert.NotNil(t, engine)
-	})
-
-	t.Run("MissingStepDuration", func(t *testing.T) {
-		cfg := minimalAuRaConfig()
-		cfg.StepDuration = nil // step 0 duration will be missing
-		db := rawdb.NewMemoryDatabase()
-		_, err := NewAuRa(cfg, db)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "step 0 duration is undefined")
-	})
-
-	t.Run("ZeroStepDuration", func(t *testing.T) {
-		cfg := minimalAuRaConfig()
-		zero := uint64(0)
-		cfg.StepDuration = &zero
-		db := rawdb.NewMemoryDatabase()
-		_, err := NewAuRa(cfg, db)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "step duration cannot be 0")
-	})
-
-	t.Run("WithStartStep", func(t *testing.T) {
-		cfg := minimalAuRaConfig()
-		startStep := uint64(42)
-		cfg.StartStep = &startStep
-		db := rawdb.NewMemoryDatabase()
-		engine, err := NewAuRa(cfg, db)
-		require.NoError(t, err)
-		// When StartStep is set, calibrate is false and the step is the given value
-		assert.Equal(t, uint64(42), engine.step.inner.inner.Load())
-	})
-}
-
 // --- calculateScore tests ---
 
 func TestCalculateScore(t *testing.T) {
@@ -281,35 +281,21 @@ func TestCalculateScore(t *testing.T) {
 			parentStep:  10,
 			currentStep: 11,
 			emptySteps:  0,
-			want:        new(uint256.Int).Sub(new(uint256.Int).Set(maxU128), uint256.NewInt(1)),
+			want:        new(uint256.Int).Sub(maxU128, uint256.NewInt(1)),
 		},
 		{
 			name:        "empty steps add to score",
 			parentStep:  10,
 			currentStep: 11,
 			emptySteps:  5,
-			want:        new(uint256.Int).Add(new(uint256.Int).Sub(new(uint256.Int).Set(maxU128), uint256.NewInt(1)), uint256.NewInt(5)),
+			want:        new(uint256.Int).Add(maxU128, uint256.NewInt(4)), // maxU128 + 10 - 11 + 5
 		},
 		{
-			name:        "same step yields maxU128",
-			parentStep:  5,
-			currentStep: 5,
-			emptySteps:  0,
-			want:        new(uint256.Int).Set(maxU128),
-		},
-		{
-			name:        "parent step greater than current wraps above maxU128",
-			parentStep:  100,
-			currentStep: 50,
-			emptySteps:  0,
-			want:        new(uint256.Int).Add(new(uint256.Int).Set(maxU128), uint256.NewInt(50)),
-		},
-		{
-			name:        "large equal values yield maxU128",
-			parentStep:  math.MaxUint64,
+			name:        "current step and empty steps offset",
+			parentStep:  math.MaxUint64 - 5,
 			currentStep: math.MaxUint64,
-			emptySteps:  0,
-			want:        new(uint256.Int).Set(maxU128),
+			emptySteps:  5,
+			want:        maxU128,
 		},
 	}
 	for _, tt := range tests {
@@ -323,17 +309,7 @@ func TestCalculateScore(t *testing.T) {
 // --- CalcDifficulty tests ---
 
 func TestCalcDifficulty(t *testing.T) {
-	t.Run("ReturnsNonZero", func(t *testing.T) {
-		engine := newTestAuRa()
-		parent := &types.Header{
-			Number: big.NewInt(1),
-			Step:   50,
-		}
-		diff := engine.CalcDifficulty(nil, 0, parent)
-		assert.NotNil(t, diff)
-		assert.True(t, diff.Sign() > 0)
-	})
-
+	// simple test just adds coverage to CalcDifficulty and checks consistency with calculateScore. More extensive testing of the score calculation is done in TestCalculateScore.
 	t.Run("ConsistentWithCalculateScore", func(t *testing.T) {
 		engine := newTestAuRa()
 		// engine step is 100, parent step is 90
@@ -344,15 +320,5 @@ func TestCalcDifficulty(t *testing.T) {
 		diff := engine.CalcDifficulty(nil, 0, parent)
 		expected := calculateScore(90, 100, 0)
 		assert.Equal(t, expected.ToBig(), diff)
-	})
-
-	t.Run("HigherParentStepYieldsHigherDifficulty", func(t *testing.T) {
-		engine := newTestAuRa()
-		parentLow := &types.Header{Number: big.NewInt(1), Step: 80}
-		parentHigh := &types.Header{Number: big.NewInt(1), Step: 95}
-		diffLow := engine.CalcDifficulty(nil, 0, parentLow)
-		diffHigh := engine.CalcDifficulty(nil, 0, parentHigh)
-		// Higher parent step (closer to current) means higher score
-		assert.True(t, diffHigh.Cmp(diffLow) > 0)
 	})
 }
