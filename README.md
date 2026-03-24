@@ -5,8 +5,8 @@ This fork of go-ethereum runs the Golang execution layer implementation of the E
 [![API Reference](
 https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
 )](https://pkg.go.dev/github.com/ethereum/go-ethereum?tab=doc)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ethereum/go-ethereum)](https://goreportcard.com/report/github.com/ethereum/go-ethereum)
-[![Travis](https://app.travis-ci.com/ethereum/go-ethereum.svg?branch=master)](https://app.travis-ci.com/github/ethereum/go-ethereum)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gnosischain/go-ethereum)](https://goreportcard.com/report/github.com/gnosischain/go-ethereum)
+[![CI](https://github.com/gnosischain/go-ethereum/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/gnosischain/go-ethereum/actions/workflows/go.yml)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/nthXNEv)
 [![Twitter](https://img.shields.io/twitter/follow/go_ethereum)](https://x.com/go_ethereum)
 
