@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -320,5 +321,186 @@ func TestCalcDifficulty(t *testing.T) {
 		diff := engine.CalcDifficulty(nil, 0, parent)
 		expected := calculateScore(90, 100, 0)
 		assert.Equal(t, expected.ToBig(), diff)
+	})
+}
+
+// --- CalculateRewards tests ---
+
+// mockSyscallReward returns a Syscall that ABI-encodes a block reward contract response.
+// It records the contract address it was called with for assertion.
+func mockSyscallReward(beneficiaries []common.Address, amounts []*big.Int) (Syscall, *common.Address) {
+	var calledWith common.Address
+	return func(addr common.Address, data []byte) ([]byte, error) {
+		calledWith = addr
+		// Encode the outputs (address[], uint256[]) using the method's output arguments.
+		out, err := blockRewardAbi().Methods["reward"].Outputs.Pack(beneficiaries, amounts)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}, &calledWith
+}
+
+func TestCalculateRewards(t *testing.T) {
+	coinbase := common.HexToAddress("0xaaaa")
+
+	t.Run("StaticReward", func(t *testing.T) {
+		engine := newTestAuRa()
+		engine.cfg.BlockReward = BlockRewardList{
+			{blockNum: 0, amount: uint256.NewInt(5_000_000)},
+		}
+		header := &types.Header{Number: big.NewInt(10), Coinbase: coinbase}
+
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		require.Len(t, rewards, 1)
+		assert.Equal(t, coinbase, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardAuthor, rewards[0].Kind)
+		assert.Equal(t, *big.NewInt(5_000_000), rewards[0].Amount)
+	})
+
+	t.Run("StaticRewardTransition", func(t *testing.T) {
+		engine := newTestAuRa()
+		// blockNum is an activation threshold: all blocks from that number onward
+		// use the associated reward amount, until the next transition.
+		engine.cfg.BlockReward = BlockRewardList{
+			{blockNum: 0, amount: uint256.NewInt(5_000_000)},
+			{blockNum: 100, amount: uint256.NewInt(2_000_000)},
+		}
+		coinbaseA := common.HexToAddress("0x1111")
+		coinbaseB := common.HexToAddress("0x2222")
+
+		// Block 99 falls in the [0, 100) range, so it gets the 5M reward
+		header := &types.Header{Number: big.NewInt(99), Coinbase: coinbaseA}
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		assert.Equal(t, coinbaseA, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardAuthor, rewards[0].Kind)
+		assert.Equal(t, *big.NewInt(5_000_000), rewards[0].Amount)
+
+		// Block 100 activates the new threshold, so it gets the 2M reward
+		header = &types.Header{Number: big.NewInt(100), Coinbase: coinbaseB}
+		rewards, err = engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		assert.Equal(t, coinbaseB, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardAuthor, rewards[0].Kind)
+		assert.Equal(t, *big.NewInt(2_000_000), rewards[0].Amount)
+	})
+
+	t.Run("NoRewardConfigured", func(t *testing.T) {
+		engine := newTestAuRa()
+		engine.cfg.BlockReward = BlockRewardList{}
+		header := &types.Header{Number: big.NewInt(1), Coinbase: coinbase}
+
+		_, err := engine.CalculateRewards(nil, header, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("ContractReward", func(t *testing.T) {
+		contractAddr := common.HexToAddress("0xbbbb")
+		rewardAmount := big.NewInt(3_000_000)
+
+		syscall, calledWith := mockSyscallReward([]common.Address{coinbase}, []*big.Int{rewardAmount})
+		engine := newTestAuRa()
+		engine.Syscall = syscall
+		engine.cfg.BlockRewardContractTransitions = BlockRewardContractList{
+			{blockNum: 0, address: contractAddr},
+		}
+
+		header := &types.Header{Number: big.NewInt(10), Coinbase: coinbase}
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		require.Len(t, rewards, 1)
+		assert.Equal(t, coinbase, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardExternal, rewards[0].Kind)
+		assert.Equal(t, *rewardAmount, rewards[0].Amount)
+		assert.Equal(t, contractAddr, *calledWith)
+	})
+
+	t.Run("ContractRewardTransition", func(t *testing.T) {
+		contractA := common.HexToAddress("0x1111")
+		contractB := common.HexToAddress("0x2222")
+		authorA := common.HexToAddress("0xaaaa")
+		authorB := common.HexToAddress("0xbbbb")
+		rewardAmount := big.NewInt(1_000_000)
+
+		syscall, calledWith := mockSyscallReward([]common.Address{authorA}, []*big.Int{rewardAmount})
+		engine := newTestAuRa()
+		engine.Syscall = syscall
+		engine.cfg.BlockRewardContractTransitions = BlockRewardContractList{
+			{blockNum: 0, address: contractA},
+			{blockNum: 100, address: contractB},
+		}
+
+		// Block 99 should use contractA
+		header := &types.Header{Number: big.NewInt(99), Coinbase: authorA}
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		assert.Equal(t, contractA, *calledWith)
+		assert.Equal(t, consensus.RewardExternal, rewards[0].Kind)
+		assert.Equal(t, authorA, rewards[0].Beneficiary)
+		assert.Equal(t, *rewardAmount, rewards[0].Amount)
+
+		// reassign mock syscall to return a different author for the second header
+		syscall, calledWith = mockSyscallReward([]common.Address{authorB}, []*big.Int{rewardAmount})
+		engine.Syscall = syscall
+
+		// Block 100 should use contractB with a different author
+		header = &types.Header{Number: big.NewInt(100), Coinbase: authorB}
+		rewards, err = engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		assert.Equal(t, contractB, *calledWith)
+		assert.Equal(t, consensus.RewardExternal, rewards[0].Kind)
+		assert.Equal(t, authorB, rewards[0].Beneficiary)
+		assert.Equal(t, *rewardAmount, rewards[0].Amount)
+	})
+
+	t.Run("ContractTakesPriorityOverStatic", func(t *testing.T) {
+		contractAddr := common.HexToAddress("0xbbbb")
+		contractReward := big.NewInt(3_000_000)
+
+		syscall, _ := mockSyscallReward([]common.Address{coinbase}, []*big.Int{contractReward})
+		engine := newTestAuRa()
+		engine.Syscall = syscall
+		engine.cfg.BlockReward = BlockRewardList{
+			{blockNum: 0, amount: uint256.NewInt(5_000_000)},
+		}
+		engine.cfg.BlockRewardContractTransitions = BlockRewardContractList{
+			{blockNum: 0, address: contractAddr},
+		}
+
+		header := &types.Header{Number: big.NewInt(10), Coinbase: coinbase}
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		assert.Equal(t, coinbase, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardExternal, rewards[0].Kind)
+		assert.Equal(t, *contractReward, rewards[0].Amount)
+	})
+
+	t.Run("ContractReturnsMultipleBeneficiaries", func(t *testing.T) {
+		contractAddr := common.HexToAddress("0xbbbb")
+		extra := common.HexToAddress("0xcccc")
+
+		syscall, _ := mockSyscallReward(
+			[]common.Address{coinbase, extra},
+			[]*big.Int{big.NewInt(1_000_000), big.NewInt(500_000)},
+		)
+		engine := newTestAuRa()
+		engine.Syscall = syscall
+		engine.cfg.BlockRewardContractTransitions = BlockRewardContractList{
+			{blockNum: 0, address: contractAddr},
+		}
+
+		header := &types.Header{Number: big.NewInt(10), Coinbase: coinbase}
+		rewards, err := engine.CalculateRewards(nil, header, nil)
+		require.NoError(t, err)
+		require.Len(t, rewards, 2)
+		assert.Equal(t, coinbase, rewards[0].Beneficiary)
+		assert.Equal(t, consensus.RewardExternal, rewards[0].Kind)
+		assert.Equal(t, *big.NewInt(1_000_000), rewards[0].Amount)
+		assert.Equal(t, extra, rewards[1].Beneficiary)
+		assert.Equal(t, consensus.RewardExternal, rewards[1].Kind)
+		assert.Equal(t, *big.NewInt(500_000), rewards[1].Amount)
 	})
 }
