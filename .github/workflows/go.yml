@@ -12,7 +12,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: [self-hosted-ghr, size-s-x64]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
       with:
@@ -39,7 +39,7 @@ jobs:
   keeper:
     name: Keeper Builds
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,7 +57,7 @@ jobs:
   test-32bit:
     name: "32bit tests"
     needs: test
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,7 +80,7 @@ jobs:
   test:
     name: Test
     needs: lint
-    runs-on: [self-hosted-ghr, size-l-x64]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         go:
