@@ -94,8 +94,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if ok {
 		// XXX check this is ok
 		b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
+		b.AuraPrepare(p.chain, block.Header(), statedb)
 	}
-	b.AuraPrepare(p.chain, block.Header(), statedb)
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
 	}
