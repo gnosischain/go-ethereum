@@ -30,8 +30,12 @@ jobs:
         go-version: 1.25
         cache: false
 
+    - name: Build abigen
+      run: go build -o ./build/bin/abigen ./cmd/abigen
+
     - name: Run linters
       run: |
+        export PATH="$PWD/build/bin:$PATH"
         go run build/ci.go lint
         go run build/ci.go check_generate
         go run build/ci.go check_baddeps
