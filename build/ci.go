@@ -163,11 +163,11 @@ var (
 
 	// Distros for which packages are created
 	debDistros = []string{
-		"xenial",   // 16.04, EOL: 04/2026
-		"bionic",   // 18.04, EOL: 04/2028
-		"focal",    // 20.04, EOL: 04/2030
-		"jammy",    // 22.04, EOL: 04/2032
-		"noble",    // 24.04, EOL: 04/2034
+		"xenial", // 16.04, EOL: 04/2026
+		"bionic", // 18.04, EOL: 04/2028
+		"focal",  // 20.04, EOL: 04/2030
+		"jammy",  // 22.04, EOL: 04/2032
+		"noble",  // 24.04, EOL: 04/2034
 	}
 
 	// This is where the tests should be unpacked.
@@ -460,7 +460,11 @@ func doCheckGenerate() {
 	)
 	pathList := []string{filepath.Join(protocPath, "bin"), protocGenGoPath, os.Getenv("PATH")}
 
-	excludes := []string{"tests/testdata", "build/cache", ".git"}
+	excludes := []string{"tests/testdata", "build/cache", ".git",
+		// Gnosis: gen_header_rlp.go is hand-modified with custom AuRa RLP encoding
+		// and cannot be auto-regenerated.
+		"core/types/gen_header_rlp.go",
+	}
 	for i := range excludes {
 		excludes[i] = filepath.FromSlash(excludes[i])
 	}
