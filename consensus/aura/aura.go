@@ -54,9 +54,9 @@ import (
 const DEBUG_LOG_FROM = 999_999_999
 
 var (
-	errOlderBlockTime = errors.New("timestamp older than parent")
-
 	allowedFutureBlockTimeSeconds = int64(15) // Max seconds from current time allowed for blocks, before they're considered future blocks
+
+	_ epochWriter = (*NonTransactionalEpochReader)(nil)
 )
 
 /*
@@ -485,7 +485,6 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 		return err
 	}
 	return nil
-
 }
 
 func (c *AuRa) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header) (chan<- struct{}, <-chan error) {
@@ -552,7 +551,6 @@ func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, 
 	}
 	return c.cfg.Validators.onEpochBegin(isEpochBegin, header, c.Syscall)
 	// check_and_lock_block -> check_epoch_end_signal END (before enact)
-
 }
 
 func (c *AuRa) ApplyRewards(header *types.Header, state vm.StateDB) error {
@@ -1114,7 +1112,6 @@ func (f *RollingFinality) hasSigner(signer common.Address) bool {
 	for j := range f.signers.validators {
 		if f.signers.validators[j] == signer {
 			return true
-
 		}
 	}
 	return false
