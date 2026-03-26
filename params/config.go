@@ -416,6 +416,31 @@ var (
 		Prague: DefaultPragueBlobConfig,
 		Osaka:  DefaultOsakaBlobConfig,
 	}
+
+	// GnosisCancunBlobConfig is the Gnosis blob configuration for the Cancun fork.
+	GnosisCancunBlobConfig = &BlobConfig{
+		Target:         1,
+		Max:            2,
+		UpdateFraction: 1112826,
+	}
+	// GnosisPragueBlobConfig is the Gnosis blob configuration for the Prague fork.
+	GnosisPragueBlobConfig = &BlobConfig{
+		Target:         1,
+		Max:            2,
+		UpdateFraction: 1112826,
+	}
+	// GnosisOsakaBlobConfig is the Gnosis blob configuration for the Osaka fork.
+	GnosisOsakaBlobConfig = &BlobConfig{
+		Target:         1,
+		Max:            2,
+		UpdateFraction: 1112826,
+	}
+	// GnosisBlobSchedule is the blob schedule for Gnosis chain.
+	GnosisBlobSchedule = &BlobScheduleConfig{
+		Cancun: GnosisCancunBlobConfig,
+		Prague: GnosisPragueBlobConfig,
+		Osaka:  GnosisOsakaBlobConfig,
+	}
 )
 
 // NetworkNames are user friendly names to use in the chain spec banner.
@@ -752,7 +777,7 @@ func (bsc *BlobScheduleConfig) GetMinBlobGasPrice() int64 {
 	if bsc != nil && bsc.MinBlobGasPrice != nil {
 		return int64(*bsc.MinBlobGasPrice)
 	}
-	return int64(BlobTxMinBlobGasprice)
+	return int64(DefaultBlobTxMinBlobGasprice)
 }
 
 // GetMaxBlobsPerTransaction returns the chain-specific max blobs per tx,
@@ -761,7 +786,7 @@ func (bsc *BlobScheduleConfig) GetMaxBlobsPerTransaction() int {
 	if bsc != nil && bsc.MaxBlobsPerTransaction != nil {
 		return *bsc.MaxBlobsPerTransaction
 	}
-	return BlobTxMaxBlobs
+	return DefaultBlobTxMaxBlobs
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
