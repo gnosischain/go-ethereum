@@ -177,9 +177,9 @@ const (
 	BlobTxBytesPerFieldElement         = 32         // Size in bytes of a field element
 	BlobTxFieldElementsPerBlob         = 4096       // Number of field elements stored in a single data blob
 	BlobTxBlobGasPerBlob               = 1 << 17    // Gas consumption of a single data blob (== blob byte size)
-	BlobTxMinBlobGasprice              = 1000000000 // Minimum gas price for data blobs
-	BlobTxPointEvaluationPrecompileGas = 50000      // Gas price for the point evaluation precompile.
-	BlobTxMaxBlobs                     = 2
+	BlobTxMinBlobGasprice              = 1 // Minimum gas price for data blobs
+	BlobTxPointEvaluationPrecompileGas = 50000 // Gas price for the point evaluation precompile.
+	BlobTxMaxBlobs                     = 6
 	BlobBaseCost                       = 1 << 13 // Base execution gas cost for a blob.
 
 	HistoryServeWindow = 8191 // Number of blocks to serve historical block hashes for, EIP-2935.

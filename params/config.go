@@ -370,21 +370,21 @@ var (
 var (
 	// DefaultCancunBlobConfig is the default blob configuration for the Cancun fork.
 	DefaultCancunBlobConfig = &BlobConfig{
-		Target:         1,
-		Max:            2,
-		UpdateFraction: 1112826,
+		Target:         3,
+		Max:            6,
+		UpdateFraction: 3338477,
 	}
 	// DefaultPragueBlobConfig is the default blob configuration for the Prague fork.
 	DefaultPragueBlobConfig = &BlobConfig{
-		Target:         1,
-		Max:            2,
-		UpdateFraction: 1112826,
+		Target:         6,
+		Max:            9,
+		UpdateFraction: 5007716,
 	}
 	// DefaultOsakaBlobConfig is the default blob configuration for the Osaka fork.
 	DefaultOsakaBlobConfig = &BlobConfig{
-		Target:         1,
-		Max:            2,
-		UpdateFraction: 1112826,
+		Target:         6,
+		Max:            9,
+		UpdateFraction: 5007716,
 	}
 	// DefaultBPO1BlobConfig is the default blob configuration for the BPO1 fork.
 	DefaultBPO1BlobConfig = &BlobConfig{
