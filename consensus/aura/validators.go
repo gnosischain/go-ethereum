@@ -511,7 +511,6 @@ func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof
 		}
 		_ = setProof
 	*/
-
 }
 
 // check a first proof: fetch the validator set at the given block.
