@@ -31,11 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var (
-	// blobTxMinBlobGasPrice is the big.Int version of the configured protocol
-	// parameter to avoid constructing a new big integer for every transaction.
-	blobTxMinBlobGasPrice = big.NewInt(params.BlobTxMinBlobGasprice)
-)
 
 // ValidationOptions define certain differences between transaction validation
 // across the different pools without having to duplicate those checks.
@@ -173,8 +168,9 @@ func validateBlobTx(tx *types.Transaction, head *types.Header, opts *ValidationO
 		return fmt.Errorf("unexpected sidecar version, want: %d, got: %d", version, sidecar.Version)
 	}
 	// Ensure the blob fee cap satisfies the minimum blob gas price
-	if tx.BlobGasFeeCapIntCmp(blobTxMinBlobGasPrice) < 0 {
-		return fmt.Errorf("%w: blob fee cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.BlobGasFeeCap(), blobTxMinBlobGasPrice)
+	minBlobGasPrice := big.NewInt(opts.Config.BlobScheduleConfig.GetMinBlobGasPrice())
+	if tx.BlobGasFeeCapIntCmp(minBlobGasPrice) < 0 {
+		return fmt.Errorf("%w: blob fee cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.BlobGasFeeCap(), minBlobGasPrice)
 	}
 	// Ensure the number of items in the blob transaction and various side
 	// data match up before doing any expensive validations
@@ -182,8 +178,9 @@ func validateBlobTx(tx *types.Transaction, head *types.Header, opts *ValidationO
 	if len(hashes) == 0 {
 		return errors.New("blobless blob transaction")
 	}
-	if len(hashes) > params.BlobTxMaxBlobs {
-		return fmt.Errorf("too many blobs in transaction: have %d, permitted %d", len(hashes), params.BlobTxMaxBlobs)
+	maxBlobs := opts.Config.BlobScheduleConfig.GetMaxBlobsPerTransaction()
+	if len(hashes) > maxBlobs {
+		return fmt.Errorf("too many blobs in transaction: have %d, permitted %d", len(hashes), maxBlobs)
 	}
 	if len(sidecar.Blobs) != len(hashes) {
 		return fmt.Errorf("invalid number of %d blobs compared to %d blob hashes", len(sidecar.Blobs), len(hashes))

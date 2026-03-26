@@ -736,6 +736,32 @@ type BlobScheduleConfig struct {
 	BPO4      *BlobConfig `json:"bpo4,omitempty"`
 	BPO5      *BlobConfig `json:"bpo5,omitempty"`
 	Amsterdam *BlobConfig `json:"amsterdam,omitempty"`
+
+	// MinBlobGasPrice overrides the global BlobTxMinBlobGasprice for this chain.
+	// If zero/nil, the global default is used.
+	MinBlobGasPrice *uint64 `json:"minBlobGasPrice,omitempty"`
+
+	// MaxBlobsPerTransaction overrides the global BlobTxMaxBlobs for this chain.
+	// If zero/nil, the global default is used.
+	MaxBlobsPerTransaction *int `json:"maxBlobsPerTransaction,omitempty"`
+}
+
+// GetMinBlobGasPrice returns the chain-specific minimum blob gas price,
+// falling back to the global default if not set.
+func (bsc *BlobScheduleConfig) GetMinBlobGasPrice() int64 {
+	if bsc != nil && bsc.MinBlobGasPrice != nil {
+		return int64(*bsc.MinBlobGasPrice)
+	}
+	return int64(BlobTxMinBlobGasprice)
+}
+
+// GetMaxBlobsPerTransaction returns the chain-specific max blobs per tx,
+// falling back to the global default if not set.
+func (bsc *BlobScheduleConfig) GetMaxBlobsPerTransaction() int {
+	if bsc != nil && bsc.MaxBlobsPerTransaction != nil {
+		return *bsc.MaxBlobsPerTransaction
+	}
+	return BlobTxMaxBlobs
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
