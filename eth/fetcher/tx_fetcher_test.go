@@ -1786,7 +1786,6 @@ func TestTransactionProtocolViolation(t *testing.T) {
 	)
 	testTransactionFetcherParallel(t, txFetcherTest{
 		init: func() *TxFetcher {
-<<<<<<< HEAD
 			f := newTestTxFetcher()
 			f.addTxs = func(txs []*types.Transaction) []error {
 				var errs []error
@@ -1797,22 +1796,6 @@ func TestTransactionProtocolViolation(t *testing.T) {
 			}
 			f.dropPeer = func(string) { drop <- struct{}{} }
 			return f
-=======
-			return NewTxFetcher(
-				func(common.Hash) bool { return false },
-				func(txs []*types.Transaction) []error {
-					var errs []error
-					for range txs {
-						errs = append(errs, txpool.ErrKZGVerificationError)
-					}
-					return errs
-				},
-				func(a string, b []common.Hash) error {
-					return nil
-				},
-				func(peer string) { drop <- struct{}{} },
-			)
->>>>>>> fdfd1235a (core/txpool: drop peers on invalid KZG proofs)
 		},
 		steps: []interface{}{
 			// Initial announcement to get something into the waitlist
