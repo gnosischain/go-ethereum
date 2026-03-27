@@ -29,10 +29,10 @@ import (
 // BlobConfig contains the parameters for blob-related formulas.
 // These can be adjusted in a fork.
 type BlobConfig struct {
-	Target           int
-	Max              int
-	UpdateFraction   uint64
-	MinBlobGasPrice  int64
+	Target          int
+	Max             int
+	UpdateFraction  uint64
+	MinBlobGasPrice int64
 }
 
 func (bc *BlobConfig) maxBlobGas() uint64 {
