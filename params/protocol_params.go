@@ -182,6 +182,9 @@ const (
 	DefaultBlobTxMaxBlobs              = 6
 	BlobBaseCost                       = 1 << 13 // Base execution gas cost for a blob.
 
+	GnosisBlobTxMinBlobGasprice = 1000000000 // Gnosis minimum gas price for data blobs (1 Gwei)
+	GnosisBlobTxMaxBlobs        = 2          // Gnosis max blobs per transaction
+
 	HistoryServeWindow = 8191 // Number of blocks to serve historical block hashes for, EIP-2935.
 
 	MaxBlockSize = 8_388_608 // maximum size of an RLP-encoded block
