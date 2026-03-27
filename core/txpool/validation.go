@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-
 // ValidationOptions define certain differences between transaction validation
 // across the different pools without having to duplicate those checks.
 type ValidationOptions struct {
