@@ -41,6 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -48,7 +49,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
-	"golang.org/x/crypto/sha3"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/slices"
 )
@@ -1182,7 +1182,7 @@ func (f *RollingFinality) buildAncestrySubChain(get func(hash common.Hash) ([]co
 
 // sealHash computes the hash of a header prior to it being sealed.
 func sealHash(header *types.Header) (hash common.Hash) {
-	hasher := sha3.NewLegacyKeccak256()
+	hasher := keccak.NewLegacyKeccak256()
 	encodeSigHeader(hasher, header)
 	hasher.(crypto.KeccakState).Read(hash[:])
 	return hash
@@ -1210,16 +1210,19 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 		enc = append(enc, header.BaseFee)
 	}
 	if header.WithdrawalsHash != nil {
-		panic("unexpected withdrawal hash value in clique")
+		panic("unexpected withdrawal hash value in aura")
 	}
 	if header.ExcessBlobGas != nil {
-		panic("unexpected excess blob gas value in clique")
+		panic("unexpected excess blob gas value in aura")
 	}
 	if header.BlobGasUsed != nil {
-		panic("unexpected blob gas used value in clique")
+		panic("unexpected blob gas used value in aura")
 	}
 	if header.ParentBeaconRoot != nil {
-		panic("unexpected parent beacon root value in clique")
+		panic("unexpected parent beacon root value in aura")
+	}
+	if header.SlotNumber != nil {
+		panic("unexpected slot number value in aura")
 	}
 	if err := rlp.Encode(w, enc); err != nil {
 		panic("can't encode: " + err.Error())
