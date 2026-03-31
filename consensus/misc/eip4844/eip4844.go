@@ -32,7 +32,7 @@ type BlobConfig struct {
 	Target          int
 	Max             int
 	UpdateFraction  uint64
-	MinBlobGasPrice int64
+	MinBlobGasPrice uint64
 }
 
 func (bc *BlobConfig) maxBlobGas() uint64 {
@@ -41,7 +41,7 @@ func (bc *BlobConfig) maxBlobGas() uint64 {
 
 // blobBaseFee computes the blob fee.
 func (bc *BlobConfig) blobBaseFee(excessBlobGas uint64) *big.Int {
-	return fakeExponential(big.NewInt(bc.MinBlobGasPrice), new(big.Int).SetUint64(excessBlobGas), new(big.Int).SetUint64(bc.UpdateFraction))
+	return fakeExponential(new(big.Int).SetUint64(bc.MinBlobGasPrice), new(big.Int).SetUint64(excessBlobGas), new(big.Int).SetUint64(bc.UpdateFraction))
 }
 
 // blobPrice returns the price of one blob in Wei.
@@ -84,7 +84,7 @@ func latestBlobConfig(cfg *params.ChainConfig, time uint64) (BlobConfig, error) 
 		Target:          bc.Target,
 		Max:             bc.Max,
 		UpdateFraction:  bc.UpdateFraction,
-		MinBlobGasPrice: cfg.BlobScheduleConfig.GetMinBlobGasPrice(),
+		MinBlobGasPrice: cfg.GetMinBlobGasPrice(),
 	}, nil
 }
 

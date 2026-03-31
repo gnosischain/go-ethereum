@@ -52,10 +52,13 @@ func gnosisTestConfig() *params.ChainConfig {
 		CancunTime:              newUint64(0),
 		TerminalTotalDifficulty: big.NewInt(0),
 		BlobScheduleConfig:      params.GnosisBlobSchedule,
+		MinBlobGasPrice:         newUint64(params.GnosisBlobTxMinBlobGasprice),
+		MaxBlobsPerTransaction:  newInt(params.GnosisBlobTxMaxBlobs),
 	}
 }
 
 func newUint64(n uint64) *uint64 { return &n }
+func newInt(n int) *int          { return &n }
 
 func TestValidateTransactionEIP2681(t *testing.T) {
 	key, err := crypto.GenerateKey()

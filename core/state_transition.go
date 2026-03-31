@@ -388,7 +388,7 @@ func (st *stateTransition) preCheck() error {
 		if len(msg.BlobHashes) == 0 {
 			return ErrMissingBlobHashes
 		}
-		if isOsaka && len(msg.BlobHashes) > st.evm.ChainConfig().BlobScheduleConfig.GetMaxBlobsPerTransaction() {
+		if isOsaka && len(msg.BlobHashes) > st.evm.ChainConfig().GetMaxBlobsPerTransaction() {
 			return ErrTooManyBlobs
 		}
 		for i, hash := range msg.BlobHashes {
