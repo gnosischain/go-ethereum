@@ -156,60 +156,41 @@ func TestTimestampCompatError(t *testing.T) {
 		"mismatching Shanghai fork timestamp in database (have timestamp 0, want timestamp 1681338455, rewindto timestamp 0)")
 }
 
-func TestBlobScheduleGetters(t *testing.T) {
-	t.Run("nil BlobScheduleConfig returns defaults", func(t *testing.T) {
-		var bsc *BlobScheduleConfig
-		if got := bsc.GetMinBlobGasPrice(); got != int64(DefaultBlobTxMinBlobGasprice) {
+func TestBlobParamGetters(t *testing.T) {
+	t.Run("nil ChainConfig returns defaults", func(t *testing.T) {
+		var cfg *ChainConfig
+		if got := cfg.GetMinBlobGasPrice(); got != DefaultBlobTxMinBlobGasprice {
 			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, DefaultBlobTxMinBlobGasprice)
 		}
-		if got := bsc.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
+		if got := cfg.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
 			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, DefaultBlobTxMaxBlobs)
 		}
 	})
 
 	t.Run("no overrides returns defaults", func(t *testing.T) {
-		bsc := &BlobScheduleConfig{
-			Cancun: DefaultCancunBlobConfig,
-		}
-		if got := bsc.GetMinBlobGasPrice(); got != int64(DefaultBlobTxMinBlobGasprice) {
+		cfg := &ChainConfig{}
+		if got := cfg.GetMinBlobGasPrice(); got != DefaultBlobTxMinBlobGasprice {
 			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, DefaultBlobTxMinBlobGasprice)
 		}
-		if got := bsc.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
+		if got := cfg.GetMaxBlobsPerTransaction(); got != DefaultBlobTxMaxBlobs {
 			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, DefaultBlobTxMaxBlobs)
 		}
 	})
 
-	t.Run("gnosis blob schedule var returns chain-specific values", func(t *testing.T) {
-		if got := GnosisBlobSchedule.GetMinBlobGasPrice(); got != 1000000000 {
-			t.Fatalf("GetMinBlobGasPrice() = %d, want 1000000000", got)
-		}
-		if got := GnosisBlobSchedule.GetMaxBlobsPerTransaction(); got != 2 {
-			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want 2", got)
-		}
-	})
-
 	t.Run("gnosis chainspec json loads correct blob params", func(t *testing.T) {
-		bsc := GnosisChainConfig.BlobScheduleConfig
-		if bsc == nil {
-			t.Fatal("GnosisChainConfig.BlobScheduleConfig is nil")
-		}
-		if got := bsc.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
+		if got := GnosisChainConfig.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
 			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, GnosisBlobTxMinBlobGasprice)
 		}
-		if got := bsc.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
+		if got := GnosisChainConfig.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
 			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, GnosisBlobTxMaxBlobs)
 		}
 	})
 
 	t.Run("chiado chainspec json loads correct blob params", func(t *testing.T) {
-		bsc := ChiadoChainConfig.BlobScheduleConfig
-		if bsc == nil {
-			t.Fatal("ChiadoChainConfig.BlobScheduleConfig is nil")
-		}
-		if got := bsc.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
+		if got := ChiadoChainConfig.GetMinBlobGasPrice(); got != GnosisBlobTxMinBlobGasprice {
 			t.Fatalf("GetMinBlobGasPrice() = %d, want %d", got, GnosisBlobTxMinBlobGasprice)
 		}
-		if got := bsc.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
+		if got := ChiadoChainConfig.GetMaxBlobsPerTransaction(); got != GnosisBlobTxMaxBlobs {
 			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, GnosisBlobTxMaxBlobs)
 		}
 	})

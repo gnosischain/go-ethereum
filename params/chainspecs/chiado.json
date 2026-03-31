@@ -32,10 +32,10 @@
       "target": 1,
       "max": 2,
       "baseFeeUpdateFraction": 1112826
-    },
-    "minBlobGasPrice": 1000000000,
-    "maxBlobsPerTransaction": 2
+    }
   },
+  "minBlobGasPrice": 1000000000,
+  "maxBlobsPerTransaction": 2,
   "noPruneContracts": {
     "0xb97036A26259B7147018913bD58a774cf91acf25": true
   },

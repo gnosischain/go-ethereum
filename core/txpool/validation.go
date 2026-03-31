@@ -167,7 +167,7 @@ func validateBlobTx(tx *types.Transaction, head *types.Header, opts *ValidationO
 		return fmt.Errorf("unexpected sidecar version, want: %d, got: %d", version, sidecar.Version)
 	}
 	// Ensure the blob fee cap satisfies the minimum blob gas price
-	minBlobGasPrice := big.NewInt(opts.Config.BlobScheduleConfig.GetMinBlobGasPrice())
+	minBlobGasPrice := new(big.Int).SetUint64(opts.Config.GetMinBlobGasPrice())
 	if tx.BlobGasFeeCapIntCmp(minBlobGasPrice) < 0 {
 		return fmt.Errorf("%w: blob fee cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.BlobGasFeeCap(), minBlobGasPrice)
 	}
@@ -177,7 +177,7 @@ func validateBlobTx(tx *types.Transaction, head *types.Header, opts *ValidationO
 	if len(hashes) == 0 {
 		return errors.New("blobless blob transaction")
 	}
-	maxBlobs := opts.Config.BlobScheduleConfig.GetMaxBlobsPerTransaction()
+	maxBlobs := opts.Config.GetMaxBlobsPerTransaction()
 	if len(hashes) > maxBlobs {
 		return fmt.Errorf("too many blobs in transaction: have %d, permitted %d", len(hashes), maxBlobs)
 	}
