@@ -1,17 +1,59 @@
 ## Go Ethereum
 
-Golang execution layer implementation of the Ethereum protocol.
+This fork of go-ethereum runs the Golang execution layer implementation of the Ethereum protocol for Gnosis chains.
 
 [![API Reference](
 https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
 )](https://pkg.go.dev/github.com/ethereum/go-ethereum?tab=doc)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ethereum/go-ethereum)](https://goreportcard.com/report/github.com/ethereum/go-ethereum)
-[![Travis](https://app.travis-ci.com/ethereum/go-ethereum.svg?branch=master)](https://app.travis-ci.com/github/ethereum/go-ethereum)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gnosischain/go-ethereum)](https://goreportcard.com/report/github.com/gnosischain/go-ethereum)
+[![CI](https://github.com/gnosischain/go-ethereum/actions/workflows/go.yml/badge.svg?branch=release-1.17.1-gc)](https://github.com/gnosischain/go-ethereum/actions/workflows/go.yml?query=branch%3Arelease-1.17.1-gc)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/nthXNEv)
 [![Twitter](https://img.shields.io/twitter/follow/go_ethereum)](https://x.com/go_ethereum)
 
-Automated builds are available for stable releases and the unstable master branch. Binary
-archives are published at https://geth.ethereum.org/downloads/.
+IMPORTANT: `master` is out-of-date, refer to [release-1.17.1-gc](https://github.com/gnosischain/go-ethereum/tree/release-1.17.1-gc) as the current active branch.
+
+## How This Fork Differs from Upstream
+
+Gnosis differs from the standard Ethereum protocol in a few key ways. See [the specs](https://github.com/gnosischain/specs) for full details on the differences.
+
+### Consensus
+
+Pre-Merge:
+- Gnosis runs AuRa as the consensus engine. The AuRa engine lives in [consensus/aura](./consensus/aura). The AuRa consensus engine still supports syncing from genesis and can process pre-merge blocks.
+
+Post-Merge:
+- Gnosis runs a beacon chain in the same way as Ethereum using `GNO` as the staking token. 
+However, AuRa is still wrapped by `Beacon` in order to handle rewards and withdrwals with Gnosis-specific logic.
+
+### Fees
+
+Fees are **not** burned as the fee token is xDAI on Gnosis and will be collected to a contract and distributed rather than being burned.
+
+### Syscalls and Service Transactions
+
+Gnosis supports syscalls to system-level contracts defined here: [posdao-contracts](https://github.com/poanetwork/posdao-contracts/tree/master/contracts).
+
+Service transactions are special transaction types on the Gnosis chain that can be submitted without paying for gas.
+
+## Important Files
+
+- [consensus/aura](./consensus/aura/): Contains the AuRa engine that provides pre-merge consensus and handles post-merge block rewards and withdrawals
+- [core/state_processor.go](./core/state_processor.go): Handles AuRa syscalls and service transactions
+- [params](./params/): Contains the gnosis [chainspecs](./params/chainspecs/) for Gnosis mainnet and Chiado testnet.
+
+
+## Implementation
+
+- [x] AuRa (Authority Round) consensus engine — full pre-merge validation + post-merge contract duties
+- [x] [EIP-1559 modifications](https://github.com/gnosischain/specs/blob/master/network-upgrades/london.md) — base fees collected to contract instead of burned (xDAI is bridged)
+- [x] [Post-merge POSDAO](https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md) — block rewards via contract syscall
+- [x] [Gnosis withdrawals](https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md) — routed through withdrawal contract
+- [x] [EIP-4844-pectra](https://github.com/gnosischain/specs/blob/master/network-upgrades/pectra.md) — custom blob schedule (target 1, max 2)
+- [x] Service transactions — zero-gas-price txs from certified senders
+- [x] Bytecode rewriting — protocol-level contract code replacement (block-number and timestamp triggered)
+- [x] Balancer hardfork
+- [ ] Osaka (Chiado testnet timestamp set)
+
 
 ## Building the source
 
@@ -67,61 +109,17 @@ Recommended:
 * High-performance SSD with at least 1TB of free space
 * 25+ MBit/sec download Internet service
 
-### Full node on the main Ethereum network
-
-By far the most common scenario is people wanting to simply interact with the Ethereum
-network: create accounts; transfer funds; deploy and interact with contracts. For this
-particular use case, the user doesn't care about years-old historical data, so we can
-sync quickly to the current state of the network. To do so:
+### Running a node
 
 ```shell
-$ geth console
+# Gnosis Mainnet
+> geth --gnosis --authrpc.jwtsecret /path/to/jwt.hex
+
+# Chiado Testnet
+> geth --chiado --authrpc.jwtsecret /path/to/jwt.hex
 ```
 
-This command will:
- * Start `geth` in snap sync mode (default, can be changed with the `--syncmode` flag),
-   causing it to download more data in exchange for avoiding processing the entire history
-   of the Ethereum network, which is very CPU intensive.
- * Start the built-in interactive [JavaScript console](https://geth.ethereum.org/docs/interacting-with-geth/javascript-console),
-   (via the trailing `console` subcommand) through which you can interact using [`web3` methods](https://github.com/ChainSafe/web3.js/blob/0.20.7/DOCUMENTATION.md) 
-   (note: the `web3` version bundled within `geth` is very old, and not up to date with official docs),
-   as well as `geth`'s own [management APIs](https://geth.ethereum.org/docs/interacting-with-geth/rpc).
-   This tool is optional and if you leave it out you can always attach it to an already running
-   `geth` instance with `geth attach`.
-
-### A Full node on the Holesky test network
-
-Transitioning towards developers, if you'd like to play around with creating Ethereum
-contracts, you almost certainly would like to do that without any real money involved until
-you get the hang of the entire system. In other words, instead of attaching to the main
-network, you want to join the **test** network with your node, which is fully equivalent to
-the main network, but with play-Ether only.
-
-```shell
-$ geth --holesky console
-```
-
-The `console` subcommand has the same meaning as above and is equally
-useful on the testnet too.
-
-Specifying the `--holesky` flag, however, will reconfigure your `geth` instance a bit:
-
- * Instead of connecting to the main Ethereum network, the client will connect to the Holesky 
-   test network, which uses different P2P bootnodes, different network IDs and genesis
-   states.
- * Instead of using the default data directory (`~/.ethereum` on Linux for example), `geth`
-   will nest itself one level deeper into a `holesky` subfolder (`~/.ethereum/holesky` on
-   Linux). Note, on OSX and Linux this also means that attaching to a running testnet node
-   requires the use of a custom endpoint since `geth attach` will try to attach to a
-   production node endpoint by default, e.g.,
-   `geth attach <datadir>/holesky/geth.ipc`. Windows users are not affected by
-   this.
-
-*Note: Although some internal protective measures prevent transactions from
-crossing over between the main network and test network, you should always
-use separate accounts for play and real money. Unless you manually move
-accounts, `geth` will by default correctly separate the two networks and will not make any
-accounts available between them.*
+For a more detailed walkthrough on running a full node of the Gnosis Chain, please refer to the [interactive guide](https://docs.gnosischain.com/node/manual/).
 
 ### Configuration
 
@@ -141,19 +139,17 @@ $ geth --your-favourite-flags dumpconfig
 
 #### Docker quick start
 
-One of the quickest ways to get Ethereum up and running on your machine is by using
+One of the quickest ways to get a Gnosis node up and running on your machine is by using
 Docker:
 
 ```shell
-docker run -d --name ethereum-node -v /Users/alice/ethereum:/root \
+docker run -d --name gnosis-node -v /Users/alice/gnosis:/root \
            -p 8545:8545 -p 30303:30303 \
-           ethereum/client-go
+           ghcr.io/gnosischain/geth:latest --gnosis --authrpc.jwtsecret /root/jwt.hex
 ```
 
-This will start `geth` in snap-sync mode with a DB memory allowance of 1GB, as the
-above command does.  It will also create a persistent volume in your home directory for
-saving your blockchain as well as map the default ports. There is also an `alpine` tag
-available for a slim version of the image.
+This will start `geth` in snap-sync mode on Gnosis mainnet. It will also create a persistent
+volume in your home directory for saving your blockchain as well as map the default ports.
 
 Do not forget `--http.addr 0.0.0.0`, if you want to access RPC from other containers
 and/or hosts. By default, `geth` binds to the local interface and RPC endpoints are not
@@ -198,20 +194,6 @@ transport before doing so! Hackers on the internet are actively trying to subver
 Ethereum nodes with exposed APIs! Further, all browser tabs can access locally
 running web servers, so malicious web pages could try to subvert locally available
 APIs!**
-
-### Operating a private network
-
-Maintaining your own private network is more involved as a lot of configurations taken for
-granted in the official networks need to be manually set up.
-
-Unfortunately since [the Merge](https://ethereum.org/en/roadmap/merge/) it is no longer possible
-to easily set up a network of geth nodes without also setting up a corresponding beacon chain.
-
-There are three different solutions depending on your use case:
-
-  * If you are looking for a simple way to test smart contracts from go in your CI, you can use the [Simulated Backend](https://geth.ethereum.org/docs/developers/dapp-developer/native-bindings#blockchain-simulator).
-  * If you want a convenient single node environment for testing, you can use our [Dev Mode](https://geth.ethereum.org/docs/developers/dapp-developer/dev-mode).
-  * If you are looking for a multiple node test network, you can set one up quite easily with [Kurtosis](https://geth.ethereum.org/docs/fundamentals/kurtosis).
 
 ## Contribution
 
