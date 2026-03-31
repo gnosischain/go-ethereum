@@ -10,7 +10,7 @@ https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/nthXNEv)
 [![Twitter](https://img.shields.io/twitter/follow/go_ethereum)](https://x.com/go_ethereum)
 
-IMPORTANT: `master` is out-of-date, refer to https://github.com/gnosischain/go-ethereum/tree/release-1.17.1-gc as the current active branch.
+IMPORTANT: `master` is out-of-date, refer to [release-1.17.1-gc](https://github.com/gnosischain/go-ethereum/tree/release-1.17.1-gc) as the current active branch.
 
 ## How This Fork Differs from Upstream
 
