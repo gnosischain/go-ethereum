@@ -79,15 +79,7 @@ jobs:
           sudo apt-get -yq --no-install-suggests --no-install-recommends install gcc-multilib
 
       - name: Build
-        run: |
-          for attempt in 1 2 3; do
-            echo "Attempt $attempt"
-            if go run build/ci.go test -arch 386 -short; then
-              exit 0
-            fi
-            echo "Attempt $attempt failed"
-          done
-          exit 1
+        run: go run build/ci.go test -arch 386 -short
 
   test:
     name: Test
