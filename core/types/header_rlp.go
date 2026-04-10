@@ -112,7 +112,7 @@ func (obj *Header) EncodeRLP(_w io.Writer) error {
 	return w.Flush()
 }
 
-func (h *Header) DecodeRLP(s *rlp.Stream) error {
+func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 	_, err := s.List()
 	if err != nil {
 		return err
@@ -124,65 +124,65 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for ParentHash: %d", len(b))
 	}
-	copy(h.ParentHash[:], b)
+	copy(obj.ParentHash[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read UncleHash: %w", err)
 	}
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for UncleHash: %d", len(b))
 	}
-	copy(h.UncleHash[:], b)
+	copy(obj.UncleHash[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read Coinbase: %w", err)
 	}
 	if len(b) != 20 {
 		return fmt.Errorf("wrong size for Coinbase: %d", len(b))
 	}
-	copy(h.Coinbase[:], b)
+	copy(obj.Coinbase[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read Root: %w", err)
 	}
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for Root: %d", len(b))
 	}
-	copy(h.Root[:], b)
+	copy(obj.Root[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read TxHash: %w", err)
 	}
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for TxHash: %d", len(b))
 	}
-	copy(h.TxHash[:], b)
+	copy(obj.TxHash[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read ReceiptHash: %w", err)
 	}
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for ReceiptHash: %d", len(b))
 	}
-	copy(h.ReceiptHash[:], b)
+	copy(obj.ReceiptHash[:], b)
 	if b, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read Bloom: %w", err)
 	}
 	if len(b) != 256 {
 		return fmt.Errorf("wrong size for Bloom: %d", len(b))
 	}
-	copy(h.Bloom[:], b)
-	if h.Difficulty, err = s.BigInt(); err != nil {
+	copy(obj.Bloom[:], b)
+	if obj.Difficulty, err = s.BigInt(); err != nil {
 		return fmt.Errorf("read Difficulty: %w", err)
 	}
-	if h.Number, err = s.BigInt(); err != nil {
+	if obj.Number, err = s.BigInt(); err != nil {
 		return fmt.Errorf("read Number: %w", err)
 	}
-	if h.GasLimit, err = s.Uint(); err != nil {
+	if obj.GasLimit, err = s.Uint(); err != nil {
 		return fmt.Errorf("read GasLimit: %w", err)
 	}
-	if h.GasUsed, err = s.Uint(); err != nil {
+	if obj.GasUsed, err = s.Uint(); err != nil {
 		return fmt.Errorf("read GasUsed: %w", err)
 	}
-	if h.Time, err = s.Uint(); err != nil {
+	if obj.Time, err = s.Uint(); err != nil {
 		return fmt.Errorf("read Time: %w", err)
 	}
-	if h.Extra, err = s.Bytes(); err != nil {
+	if obj.Extra, err = s.Bytes(); err != nil {
 		return fmt.Errorf("read Extra: %w", err)
 	}
 
@@ -191,30 +191,30 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 		return fmt.Errorf("read MixDigest: %w", err)
 	}
 	if size != 32 { // AuRa
-		if h.Step, err = s.Uint(); err != nil {
+		if obj.Step, err = s.Uint(); err != nil {
 			return fmt.Errorf("read AuRaStep: %w", err)
 		}
-		if h.Signature, err = s.Bytes(); err != nil {
+		if obj.Signature, err = s.Bytes(); err != nil {
 			return fmt.Errorf("read AuRaSeal: %w", err)
 		}
 	} else {
 		if b, err = s.Bytes(); err != nil {
 			return fmt.Errorf("read MixDigest: %w", err)
 		}
-		copy(h.MixDigest[:], b)
+		copy(obj.MixDigest[:], b)
 		if b, err = s.Bytes(); err != nil {
 			return fmt.Errorf("read Nonce: %w", err)
 		}
 		if len(b) != 8 {
 			return fmt.Errorf("wrong size for Nonce: %d", len(b))
 		}
-		copy(h.Nonce[:], b)
+		copy(obj.Nonce[:], b)
 	}
 
 	// BaseFee
-	if h.BaseFee, err = s.BigInt(); err != nil {
+	if obj.BaseFee, err = s.BigInt(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.BaseFee = nil
+			obj.BaseFee = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no BaseFee): %w", err)
 			}
@@ -226,7 +226,7 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	// WithdrawalsHash
 	if b, err = s.Bytes(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.WithdrawalsHash = nil
+			obj.WithdrawalsHash = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no WithdrawalsHash): %w", err)
 			}
@@ -237,13 +237,13 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for WithdrawalsHash: %d", len(b))
 	}
-	h.WithdrawalsHash = new(common.Hash)
-	h.WithdrawalsHash.SetBytes(b)
+	obj.WithdrawalsHash = new(common.Hash)
+	obj.WithdrawalsHash.SetBytes(b)
 
 	var blobGasUsed uint64
 	if blobGasUsed, err = s.Uint(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.BlobGasUsed = nil
+			obj.BlobGasUsed = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no BlobGasUsed): %w", err)
 			}
@@ -251,12 +251,12 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 		}
 		return fmt.Errorf("read BlobGasUsed: %w", err)
 	}
-	h.BlobGasUsed = &blobGasUsed
+	obj.BlobGasUsed = &blobGasUsed
 
 	var excessBlobGas uint64
 	if excessBlobGas, err = s.Uint(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.ExcessBlobGas = nil
+			obj.ExcessBlobGas = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no ExcessBlobGas): %w", err)
 			}
@@ -264,12 +264,12 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 		}
 		return fmt.Errorf("read ExcessBlobGas: %w", err)
 	}
-	h.ExcessBlobGas = &excessBlobGas
+	obj.ExcessBlobGas = &excessBlobGas
 
 	// ParentBeaconBlockRoot
 	if b, err = s.Bytes(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.ParentBeaconRoot = nil
+			obj.ParentBeaconRoot = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no ParentBeaconBlockRoot): %w", err)
 			}
@@ -280,13 +280,13 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for ParentBeaconBlockRoot: %d", len(b))
 	}
-	h.ParentBeaconRoot = new(common.Hash)
-	h.ParentBeaconRoot.SetBytes(b)
+	obj.ParentBeaconRoot = new(common.Hash)
+	obj.ParentBeaconRoot.SetBytes(b)
 
 	// RequestsHash
 	if b, err = s.Bytes(); err != nil {
 		if errors.Is(err, rlp.EOL) {
-			h.RequestsHash = nil
+			obj.RequestsHash = nil
 			if err := s.ListEnd(); err != nil {
 				return fmt.Errorf("close header struct (no RequestHash): %w", err)
 			}
@@ -294,8 +294,8 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 		}
 		return fmt.Errorf("wrong size for RequestHash: %d", len(b))
 	}
-	h.RequestsHash = new(common.Hash)
-	h.RequestsHash.SetBytes(b)
+	obj.RequestsHash = new(common.Hash)
+	obj.RequestsHash.SetBytes(b)
 
 	if err := s.ListEnd(); err != nil {
 		return fmt.Errorf("close header struct: %w", err)
