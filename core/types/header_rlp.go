@@ -173,13 +173,13 @@ func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 	if obj.Number, err = s.BigInt(); err != nil {
 		return fmt.Errorf("read Number: %w", err)
 	}
-	if obj.GasLimit, err = s.Uint(); err != nil {
+	if obj.GasLimit, err = s.Uint64(); err != nil {
 		return fmt.Errorf("read GasLimit: %w", err)
 	}
-	if obj.GasUsed, err = s.Uint(); err != nil {
+	if obj.GasUsed, err = s.Uint64(); err != nil {
 		return fmt.Errorf("read GasUsed: %w", err)
 	}
-	if obj.Time, err = s.Uint(); err != nil {
+	if obj.Time, err = s.Uint64(); err != nil {
 		return fmt.Errorf("read Time: %w", err)
 	}
 	if obj.Extra, err = s.Bytes(); err != nil {
@@ -191,7 +191,7 @@ func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 		return fmt.Errorf("read MixDigest: %w", err)
 	}
 	if size != 32 { // AuRa
-		if obj.Step, err = s.Uint(); err != nil {
+		if obj.Step, err = s.Uint64(); err != nil {
 			return fmt.Errorf("read AuRaStep: %w", err)
 		}
 		if obj.Signature, err = s.Bytes(); err != nil {
@@ -241,7 +241,7 @@ func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 	obj.WithdrawalsHash.SetBytes(b)
 
 	var blobGasUsed uint64
-	if blobGasUsed, err = s.Uint(); err != nil {
+	if blobGasUsed, err = s.Uint64(); err != nil {
 		if errors.Is(err, rlp.EOL) {
 			obj.BlobGasUsed = nil
 			if err := s.ListEnd(); err != nil {
@@ -254,7 +254,7 @@ func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 	obj.BlobGasUsed = &blobGasUsed
 
 	var excessBlobGas uint64
-	if excessBlobGas, err = s.Uint(); err != nil {
+	if excessBlobGas, err = s.Uint64(); err != nil {
 		if errors.Is(err, rlp.EOL) {
 			obj.ExcessBlobGas = nil
 			if err := s.ListEnd(); err != nil {
@@ -288,14 +288,31 @@ func (obj *Header) DecodeRLP(s *rlp.Stream) error {
 		if errors.Is(err, rlp.EOL) {
 			obj.RequestsHash = nil
 			if err := s.ListEnd(); err != nil {
-				return fmt.Errorf("close header struct (no RequestHash): %w", err)
+				return fmt.Errorf("close header struct (no RequestsHash): %w", err)
 			}
 			return nil
 		}
-		return fmt.Errorf("wrong size for RequestHash: %d", len(b))
+		return fmt.Errorf("read RequestsHash: %w", err)
+	}
+	if len(b) != 32 {
+		return fmt.Errorf("wrong size for RequestsHash: %d", len(b))
 	}
 	obj.RequestsHash = new(common.Hash)
 	obj.RequestsHash.SetBytes(b)
+
+	// SlotNumber
+	var slotNumber uint64
+	if slotNumber, err = s.Uint64(); err != nil {
+		if errors.Is(err, rlp.EOL) {
+			obj.SlotNumber = nil
+			if err := s.ListEnd(); err != nil {
+				return fmt.Errorf("close header struct (no SlotNumber): %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("read SlotNumber: %w", err)
+	}
+	obj.SlotNumber = &slotNumber
 
 	if err := s.ListEnd(); err != nil {
 		return fmt.Errorf("close header struct: %w", err)
