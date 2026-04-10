@@ -62,6 +62,9 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 //go:generate go run github.com/fjl/gencodec -type Header -field-override headerMarshaling -out gen_header_json.go
 
+// IMPORTANT: RLP encoding/decoding is implemented manually in header_rlp.go to account for conditional encoding of AuRa fields. Do not use code generation tools to edit that file.
+// If Header fields are changed, header_rlp.go must be updated manually to reflect the changes.
+//
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
 	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
