@@ -11,15 +11,19 @@ import (
 )
 
 // autoFillHeader uses reflection to set every Header field to a distinct
-// non-zero value. If a new field is added to Header with an unhandled type,
-// the verification step in the test will catch it.
-func autoFillHeader() *Header {
+// non-zero value. It panics if any field remains zero after filling, which
+// means fillField needs to be updated to handle the new type.
+func autoFillHeader(t *testing.T) *Header {
+	t.Helper()
 	h := new(Header)
 	v := reflect.ValueOf(h).Elem()
-	t := v.Type()
+	typ := v.Type()
 
-	for i := 0; i < t.NumField(); i++ {
+	for i := 0; i < typ.NumField(); i++ {
 		fillField(v.Field(i), byte(i+1))
+		require.Falsef(t, v.Field(i).IsZero(),
+			"autoFillHeader did not set field %s (type %s); update fillField to handle this type",
+			typ.Field(i).Name, v.Field(i).Type())
 	}
 	return h
 }
@@ -72,18 +76,6 @@ func fillField(field reflect.Value, seed byte) {
 	}
 }
 
-// verifyAllFieldsNonZero checks that every field in h is non-zero. If
-// autoFillHeader encounters a new type it doesn't handle, this catches it.
-func verifyAllFieldsNonZero(t *testing.T, h *Header) {
-	t.Helper()
-	v := reflect.ValueOf(h).Elem()
-	typ := v.Type()
-	for i := 0; i < typ.NumField(); i++ {
-		require.Falsef(t, v.Field(i).IsZero(),
-			"autoFillHeader did not set field %s (type %s); update fillField to handle this type",
-			typ.Field(i).Name, v.Field(i).Type())
-	}
-}
 
 // TestHeaderRLPAutoFields uses reflection to populate every Header field,
 // then verifies encode→decode round-trip fidelity. If a new field is added
@@ -95,8 +87,7 @@ func verifyAllFieldsNonZero(t *testing.T, h *Header) {
 //   - AuRa:   Step + Signature  (MixDigest/Nonce zeroed)
 func TestHeaderRLPAutoFields(t *testing.T) {
 	t.Run("Ethash", func(t *testing.T) {
-		h := autoFillHeader()
-		verifyAllFieldsNonZero(t, h)
+		h := autoFillHeader(t)
 
 		// Ethash path: Signature must be empty, Step is unused.
 		h.Step = 0
@@ -111,7 +102,7 @@ func TestHeaderRLPAutoFields(t *testing.T) {
 	})
 
 	t.Run("AuRa", func(t *testing.T) {
-		h := autoFillHeader()
+		h := autoFillHeader(t)
 		// AuRa path: MixDigest and Nonce are unused.
 		h.MixDigest = common.Hash{}
 		h.Nonce = BlockNonce{}
