@@ -11,7 +11,12 @@ func ReadEpoch(db ethdb.KeyValueReader, blockNum uint64, blockHash common.Hash) 
 	k := make([]byte, 40 /* block num uint64 + block hash */)
 	binary.BigEndian.PutUint64(k, blockNum)
 	copy(k[8:], blockHash[:])
-	return db.Get(epochKey(k))
+	key := epochKey(k)
+	has, err := db.Has(key)
+	if err != nil || !has {
+		return nil, err
+	}
+	return db.Get(key)
 }
 
 // TODO use sqlite if leveldb doesn't work
@@ -54,7 +59,12 @@ func ReadPendingEpoch(db ethdb.KeyValueReader, blockNum uint64, blockHash common
 	k := make([]byte, 8+32)
 	binary.BigEndian.PutUint64(k, blockNum)
 	copy(k[8:], blockHash[:])
-	return db.Get(pendingEpochKey(k))
+	key := pendingEpochKey(k)
+	has, err := db.Has(key)
+	if err != nil || !has {
+		return nil, err
+	}
+	return db.Get(key)
 }
 
 func WritePendingEpoch(db ethdb.KeyValueWriter, blockNum uint64, blockHash common.Hash, transitionProof []byte) (err error) {
