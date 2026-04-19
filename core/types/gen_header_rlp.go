@@ -3,12 +3,12 @@
 package types
 
 import (
-	"io"
-	"fmt"
 	"errors"
-	
-	"github.com/ethereum/go-ethereum/rlp"
+	"fmt"
+	"io"
+
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 func (obj *Header) EncodeRLP(_w io.Writer) error {
@@ -110,7 +110,6 @@ func (obj *Header) EncodeRLP(_w io.Writer) error {
 	w.ListEnd(_tmp0)
 	return w.Flush()
 }
-
 
 func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	_, err := s.List()
@@ -280,7 +279,7 @@ func (h *Header) DecodeRLP(s *rlp.Stream) error {
 	if len(b) != 32 {
 		return fmt.Errorf("wrong size for ParentBeaconBlockRoot: %d", len(b))
 	}
-	h.ParentBeaconRoot= new(common.Hash)
+	h.ParentBeaconRoot = new(common.Hash)
 	h.ParentBeaconRoot.SetBytes(b)
 
 	// RequestsHash
