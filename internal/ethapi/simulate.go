@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core"
@@ -316,6 +317,11 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 	// move them to another address.
 	if precompiles != nil {
 		evm.SetPrecompiles(precompiles)
+	}
+	// Simulated blocks can hit AuRa reward contracts during finalization.
+	// Wire the syscall for this simulation context to avoid nil syscall panics.
+	if b, ok := sim.b.Engine().(*beacon.Beacon); ok {
+		b.SetAuraSyscall(core.MakeAuraSyscall(tracingStateDB, blockContext, sim.chainConfig, *vmConfig))
 	}
 	if sim.chainConfig.IsPrague(header.Number, header.Time) || sim.chainConfig.IsVerkle(header.Number, header.Time) {
 		core.ProcessParentBlockHash(header.ParentHash, evm)
