@@ -40,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -2562,6 +2563,57 @@ func TestSimulateV1ChainLinkage(t *testing.T) {
 	// whereas the second call should return the blockhash for block2 (i.e. block2.Hash()).
 	require.Equal(t, block1.Hash().Bytes(), []byte(results[2].Calls[0].ReturnValue), "returned blockhash for block1 does not match")
 	require.Equal(t, block2.Hash().Bytes(), []byte(results[2].Calls[1].ReturnValue), "returned blockhash for block2 does not match")
+}
+
+func TestSimulateV1AuRaRewardContractSyscall(t *testing.T) {
+	t.Parallel()
+
+	var (
+		stepDuration = uint64(1)
+		validator    = common.HexToAddress("0x00000000000000000000000000000000000000aa")
+		rewardAddr   = common.HexToAddress("0x0000000000000000000000000000000000000bad")
+	)
+	chainConfig := *params.MergedTestChainConfig
+	chainConfig.Ethash = nil
+	chainConfig.Clique = nil
+	chainConfig.Aura = &params.AuRaConfig{
+		StepDuration: &stepDuration,
+		Validators: &params.ValidatorSetJson{
+			List: []common.Address{validator},
+		},
+		// Activate reward-contract path at simulated block 2.
+		BlockRewardContractTransitions: map[uint]common.Address{
+			2: rewardAddr,
+		},
+	}
+	genesis := &core.Genesis{
+		Config: &chainConfig,
+		Alloc: types.GenesisAlloc{
+			validator: {Balance: big.NewInt(params.Ether)},
+		},
+	}
+	auraEngine, err := aura.NewAuRa(chainConfig.Aura, rawdb.NewMemoryDatabase())
+	if err != nil {
+		t.Fatalf("failed to create AuRa engine: %v", err)
+	}
+	backend := newTestBackend(t, 0, genesis, beacon.New(auraEngine), func(i int, b *core.BlockGen) {})
+	api := NewBlockChainAPI(backend)
+
+	latest := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
+	opts := simOpts{
+		BlockStateCalls: []simBlock{
+			{
+				// Force simulation up to block 2 so reward-contract transition is hit.
+				BlockOverrides: &override.BlockOverrides{
+					Number: (*hexutil.Big)(big.NewInt(2)),
+				},
+			},
+		},
+	}
+	require.NotPanics(t, func() {
+		_, err = api.SimulateV1(context.Background(), opts, &latest)
+		require.NoError(t, err)
+	})
 }
 
 func TestSimulateV1TxSender(t *testing.T) {
