@@ -464,11 +464,7 @@ func doCheckGenerate() {
 	)
 	pathList := []string{filepath.Join(protocPath, "bin"), protocGenGoPath, os.Getenv("PATH")}
 
-	excludes := []string{"tests/testdata", "build/cache", ".git",
-		// Gnosis: gen_header_rlp.go is hand-modified with custom AuRa RLP encoding
-		// and cannot be auto-regenerated.
-		"core/types/gen_header_rlp.go",
-	}
+	excludes := []string{"tests/testdata", "build/cache", ".git"}
 	for i := range excludes {
 		excludes[i] = filepath.FromSlash(excludes[i])
 	}
