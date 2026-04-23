@@ -22,18 +22,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/telemetry"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -41,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -55,9 +57,9 @@ import (
 const DEBUG_LOG_FROM = 999_999_999
 
 var (
-	errOlderBlockTime = errors.New("timestamp older than parent")
-
 	allowedFutureBlockTimeSeconds = int64(15) // Max seconds from current time allowed for blocks, before they're considered future blocks
+
+	_ epochWriter = (*NonTransactionalEpochReader)(nil)
 )
 
 /*
@@ -486,7 +488,6 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 		return err
 	}
 	return nil
-
 }
 
 func (c *AuRa) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header) (chan<- struct{}, <-chan error) {
@@ -553,7 +554,6 @@ func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, 
 	}
 	return c.cfg.Validators.onEpochBegin(isEpochBegin, header, c.Syscall)
 	// check_and_lock_block -> check_epoch_end_signal END (before enact)
-
 }
 
 func (c *AuRa) ApplyRewards(header *types.Header, state vm.StateDB, evm *vm.EVM) error {
@@ -639,7 +639,9 @@ func isEpochEnd(chain consensus.ChainHeaderReader, e *NonTransactionalEpochReade
 		pendingTransitionProof, err := e.GetPendingEpoch(finalized[i].hash, finalized[i].number)
 		// GNOSIS: pebble returns an error when a non-existent value
 		// isn't found, which is what happens at genesis.
-		if err != nil && !errors.Is(err, pebble.ErrNotFound) {
+		// using raw string to remove pebble import which was breaking
+		// cmd/keeper build on MIPSLE target
+		if err != nil && !strings.Contains(err.Error(), "pebble: not found") {
 			return nil, err
 		}
 		if pendingTransitionProof == nil {
@@ -766,7 +768,7 @@ func calculateScore(parentStep, currentStep, currentEmptySteps uint64) *uint256.
 }
 
 func (c *AuRa) SealHash(header *types.Header) common.Hash {
-	return clique.SealHash(header)
+	return sealHash(header)
 }
 
 // See https://openethereum.github.io/Permissioning.html#gas-price
@@ -1124,7 +1126,6 @@ func (f *RollingFinality) hasSigner(signer common.Address) bool {
 	for j := range f.signers.validators {
 		if f.signers.validators[j] == signer {
 			return true
-
 		}
 	}
 	return false
@@ -1190,4 +1191,55 @@ func (f *RollingFinality) buildAncestrySubChain(get func(hash common.Hash) ([]co
 		parentHash = newParentHash
 	}
 	return nil
+}
+
+// COPIED FROM CONSENSUS/CLIQUE TO AVOID AN IMPORT CYCLE (clique <- core <- aura <- clique)
+
+// sealHash computes the hash of a header prior to it being sealed.
+func sealHash(header *types.Header) (hash common.Hash) {
+	hasher := keccak.NewLegacyKeccak256()
+	encodeSigHeader(hasher, header)
+	hasher.(crypto.KeccakState).Read(hash[:])
+	return hash
+}
+
+func encodeSigHeader(w io.Writer, header *types.Header) {
+	enc := []interface{}{
+		header.ParentHash,
+		header.UncleHash,
+		header.Coinbase,
+		header.Root,
+		header.TxHash,
+		header.ReceiptHash,
+		header.Bloom,
+		header.Difficulty,
+		header.Number,
+		header.GasLimit,
+		header.GasUsed,
+		header.Time,
+		header.Extra[:len(header.Extra)-crypto.SignatureLength], // Yes, this will panic if extra is too short
+		header.MixDigest,
+		header.Nonce,
+	}
+	if header.BaseFee != nil {
+		enc = append(enc, header.BaseFee)
+	}
+	if header.WithdrawalsHash != nil {
+		panic("unexpected withdrawal hash value in aura")
+	}
+	if header.ExcessBlobGas != nil {
+		panic("unexpected excess blob gas value in aura")
+	}
+	if header.BlobGasUsed != nil {
+		panic("unexpected blob gas used value in aura")
+	}
+	if header.ParentBeaconRoot != nil {
+		panic("unexpected parent beacon root value in aura")
+	}
+	if header.SlotNumber != nil {
+		panic("unexpected slot number value in aura")
+	}
+	if err := rlp.Encode(w, enc); err != nil {
+		panic("can't encode: " + err.Error())
+	}
 }

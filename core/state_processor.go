@@ -111,8 +111,8 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 				}
 			}
 		}
+		b.AuraPrepare(p.chain, block.Header(), statedb)
 	}
-	b.AuraPrepare(p.chain, block.Header(), statedb)
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
 	}

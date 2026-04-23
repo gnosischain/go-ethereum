@@ -591,7 +591,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		// XXX rules.IsLondon shouldn't be necessary
 		// Move the remainder to the eip1559 fee collector
 		if rules.IsLondon {
-			if !msg.IsFree() {
+			if !msg.IsFree() && st.evm.ChainConfig().Aura != nil {
 				burntContractAddress := *st.evm.ChainConfig().Aura.Eip1559FeeCollector
 				burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(st.gasUsed()), uint256.MustFromBig(st.evm.Context.BaseFee))
 				st.state.AddBalance(burntContractAddress, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)

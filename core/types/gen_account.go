@@ -17,11 +17,11 @@ var _ = (*accountMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (a Account) MarshalJSON() ([]byte, error) {
 	type Account struct {
-		Constructor hexutil.Bytes           `json:"constructor,omitempty"`
-		Code    hexutil.Bytes               `json:"code,omitempty"`
-		Storage map[storageJSON]storageJSON `json:"storage,omitempty"`
-		Balance *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
-		Nonce   math.HexOrDecimal64         `json:"nonce,omitempty"`
+		Constructor hexutil.Bytes               `json:"constructor,omitempty"`
+		Code        hexutil.Bytes               `json:"code,omitempty"`
+		Storage     map[storageJSON]storageJSON `json:"storage,omitempty"`
+		Balance     *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
+		Nonce       math.HexOrDecimal64         `json:"nonce,omitempty"`
 	}
 	var enc Account
 	enc.Constructor = a.Constructor
