@@ -576,6 +576,13 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	effectiveTip := msg.GasPrice
 	if rules.IsLondon {
 		effectiveTip = new(big.Int).Sub(msg.GasPrice, st.evm.Context.BaseFee)
+		// Gnosis service transactions (GasFeeCap < BaseFee, IsFree()==true) reach
+		// this point with a negative effectiveTip; uint256.FromBig would wrap to
+		// near-2^256 and poison the coinbase balance. Clamp to zero so these
+		// txs contribute no tip, matching canonical OpenEthereum/Parity behavior.
+		if effectiveTip.Sign() < 0 {
+			effectiveTip = new(big.Int)
+		}
 	}
 	effectiveTipU256, _ := uint256.FromBig(effectiveTip)
 
