@@ -19,6 +19,8 @@
   "osakaTime": 1776168380,
   "terminalTotalDifficulty": 8626000000000000000000058750000000000000000000,
   "terminalTotalDifficultyPassed": true,
+  "minBlobGasPrice": 1000000000,
+  "maxBlobsPerTransaction": 2,
   "blobSchedule": {
     "cancun": {
       "target": 1,
@@ -41,8 +43,6 @@
       "baseFeeUpdateFraction": 1112826
     }
   },
-  "minBlobGasPrice": 1000000000,
-  "maxBlobsPerTransaction": 2,
   "depositContractAddress": "0x0B98057eA310F4d31F2a452B414647007d1645d9",
   "aura": {
     "stepDuration": 5,
