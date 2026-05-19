@@ -430,15 +430,8 @@ func AssembleBlock(engine consensus.Engine, chain consensus.ChainHeaderReader, h
 func MakeAuraSyscall(statedb vm.StateDB, context vm.BlockContext, chainConfig *params.ChainConfig, vmConfig vm.Config) aura.Syscall {
 	return func(contractaddr common.Address, data []byte) ([]byte, error) {
 		evm := vm.NewEVM(context, statedb, chainConfig, vmConfig)
-		// Pre-Amsterdam, upstream's `evm.Call` performed an unconditional
-		// `Context.Transfer` for all calls including zero-value system calls.
-		// Geth PR #33741 ("core/vm: disable the value transfer in syscall")
-		// skips that transfer for syscalls to align with the Amsterdam /
-		// EIP-7928 spec. Gnosis' pre-merge AuRa validator-set transitions
-		// (e.g. the safeContract finalizeChange at block 1301) rely on the
-		// pre-Amsterdam state-clearing side-effect of that transfer to reach
-		// the same post-state as mainnet, so replicate it here for
-		// pre-Amsterdam AuRa syscalls only.
+		// On Pre-Amsterdam blocks, explicitly call transfer even for zero-value to match pre-merge
+		// AuRa syscall behavior
 		rules := chainConfig.Rules(context.BlockNumber, context.Random != nil, context.Time)
 		if !rules.IsAmsterdam {
 			context.Transfer(statedb, params.SystemAddress, contractaddr, new(uint256.Int), &rules)

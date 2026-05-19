@@ -689,14 +689,11 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("invalid baseFee: %v", st.evm.Context.BaseFee)
 		}
-		effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
 
-		// Gnosis service transactions (GasFeeCap < BaseFee, IsFree()==true) reach
-		// this point with a negative effectiveTip; uint256.FromBig would wrap to
-		// near-2^256 and poison the coinbase balance. Clamp to zero so these
-		// txs contribute no tip, matching canonical OpenEthereum/Parity behavior.
-		if effectiveTip.Sign() < 0 {
+		if msg.IsFree() {
 			effectiveTip = new(uint256.Int)
+		} else {
+			effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
 		}
 	}
 
