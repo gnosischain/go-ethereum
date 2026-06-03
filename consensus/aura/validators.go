@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/aura/auraabi"
 	"github.com/ethereum/go-ethereum/consensus/aura/aurainterfaces"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -80,7 +81,7 @@ type ValidatorSet interface {
 	//
 	// Returns the set, along with a flag indicating whether finality of a specific
 	// hash should be proven.
-	epochSet(firstInEpoch bool, num uint64, setProof []byte, call Syscall) (SimpleList, common.Hash, error)
+	epochSet(firstInEpoch bool, num uint64, setProof []byte, evm *vm.EVM) (SimpleList, common.Hash, error)
 
 	// Extract genesis epoch data from the genesis state and header.
 	genesisEpochData(header *types.Header, call Syscall) ([]byte, error)
@@ -274,10 +275,10 @@ func (s *Multi) onCloseBlock(header *types.Header, address common.Address) error
 
 // TODO: do we need add `proof` argument?
 // nolint
-func (s *Multi) epochSet(firstInEpoch bool, num uint64, proof []byte, call Syscall) (SimpleList, common.Hash, error) {
+func (s *Multi) epochSet(firstInEpoch bool, num uint64, proof []byte, evm *vm.EVM) (SimpleList, common.Hash, error) {
 	setBlock, set := s.correctSetByNumber(num)
 	firstInEpoch = setBlock == num
-	return set.epochSet(firstInEpoch, num, proof, call)
+	return set.epochSet(firstInEpoch, num, proof, evm)
 }
 func (s *Multi) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
 	_, set := s.correctSetByNumber(0)
