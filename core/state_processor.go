@@ -430,6 +430,12 @@ func AssembleBlock(engine consensus.Engine, chain consensus.ChainHeaderReader, h
 func MakeAuraSyscall(statedb vm.StateDB, context vm.BlockContext, chainConfig *params.ChainConfig, vmConfig vm.Config) aura.Syscall {
 	return func(contractaddr common.Address, data []byte) ([]byte, error) {
 		evm := vm.NewEVM(context, statedb, chainConfig, vmConfig)
+		// On Pre-Amsterdam blocks, explicitly call transfer even for zero-value to match pre-merge
+		// AuRa syscall behavior
+		rules := chainConfig.Rules(context.BlockNumber, context.Random != nil, context.Time)
+		if !rules.IsAmsterdam {
+			context.Transfer(statedb, params.SystemAddress, contractaddr, new(uint256.Int), &rules)
+		}
 		ret, _, err := evm.Call(params.SystemAddress, contractaddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
 		if err != nil {
 			panic(err)

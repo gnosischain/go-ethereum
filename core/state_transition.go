@@ -689,7 +689,12 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("invalid baseFee: %v", st.evm.Context.BaseFee)
 		}
-		effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
+
+		if msg.IsFree() {
+			effectiveTip = new(uint256.Int)
+		} else {
+			effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
+		}
 	}
 
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
