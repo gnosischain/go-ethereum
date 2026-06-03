@@ -359,7 +359,7 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 }
 
 // makeEnv creates a new environment for the sealing block.
-func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase common.Address, witness bool, state *state.StateDB) (*environment, error) {
+func (miner *Miner) makeEnv(_ *types.Header, header *types.Header, coinbase common.Address, witness bool, state *state.StateDB) (*environment, error) {
 	var bundle *stateless.Witness
 	if witness {
 		var err error
