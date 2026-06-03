@@ -155,35 +155,6 @@ type PermissionedStep struct {
 type ReceivedStepHashes map[uint64]map[common.Address]common.Hash //BTreeMap<(u64, Address), H256>
 
 // nolint
-func (r ReceivedStepHashes) get(step uint64, author common.Address) (common.Hash, bool) {
-	res, ok := r[step]
-	if !ok {
-		return common.Hash{}, false
-	}
-	result, ok := res[author]
-	return result, ok
-}
-
-// nolint
-func (r ReceivedStepHashes) insert(step uint64, author common.Address, blockHash common.Hash) {
-	res, ok := r[step]
-	if !ok {
-		res = map[common.Address]common.Hash{}
-		r[step] = res
-	}
-	res[author] = blockHash
-}
-
-// nolint
-func (r ReceivedStepHashes) dropAncient(step uint64) {
-	for i := range r {
-		if i < step {
-			delete(r, i)
-		}
-	}
-}
-
-// nolint
 type EpochManager struct {
 	epochTransitionHash   common.Hash // H256,
 	epochTransitionNumber uint64      // BlockNumber
@@ -249,8 +220,8 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		e.finalityChecker = NewRollingFinality(epochSet)
 		if proof.SignalNumber >= DEBUG_LOG_FROM {
 			fmt.Printf("new rolling finality: %d\n", proof.SignalNumber)
-			for i := 0; i < len(epochSet); i++ {
-				fmt.Printf("\t%x\n", epochSet[i])
+			for _, e := range epochSet {
+				fmt.Printf("\t%x\n", e)
 			}
 		}
 	}
@@ -518,9 +489,6 @@ func (c *AuRa) VerifyUncles(chain consensus.ChainReader, header *types.Block) er
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) error {
-	c.verifyGasLimitOverride(chain.Config(), chain, header, statedb)
-
-	// func (c *AuRa) Initialize(config *params.ChainConfig, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []types.Transaction, uncles []*types.Header, syscall consensus.SystemCall) {
 	blockNum := header.Number.Uint64()
 	for address, rewrittenCode := range c.cfg.RewriteBytecode[blockNum] {
 		statedb.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
@@ -1124,12 +1092,7 @@ func (f *RollingFinality) isFinalized() bool {
 	return len(f.signCount)*2 > len(f.signers.validators)
 }
 func (f *RollingFinality) hasSigner(signer common.Address) bool {
-	for j := range f.signers.validators {
-		if f.signers.validators[j] == signer {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.signers.validators, signer)
 }
 func (f *RollingFinality) addSigners(signers []common.Address) bool {
 	for i := range signers {
@@ -1205,7 +1168,7 @@ func sealHash(header *types.Header) (hash common.Hash) {
 }
 
 func encodeSigHeader(w io.Writer, header *types.Header) {
-	enc := []interface{}{
+	enc := []any{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,
