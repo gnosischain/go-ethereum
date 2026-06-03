@@ -444,18 +444,20 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
 	// Verify the block's gas usage and (if applicable) verify the base fee.
+	if !chain.Config().IsLondon(header.Number) && header.BaseFee != nil {
+		return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
+	}
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-	if !chain.Config().IsLondon(header.Number) {
-		if header.BaseFee != nil {
-			return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
-		}
-	} else if parent != nil {
+	if parent != nil {
 		if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
 			return err
 		}
 	}
 
 	// Verify that the block number is parent's +1
+	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
+		return consensus.ErrInvalidNumber
+	}
 
 	// Verify the non-existence of withdrawalsHash.
 	if header.WithdrawalsHash != nil {
