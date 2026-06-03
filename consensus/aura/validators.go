@@ -3,6 +3,7 @@ package aura
 import (
 	"container/list"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -19,7 +20,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
 )
 
 // nolint
@@ -300,16 +303,16 @@ type SimpleList struct {
 	validators []common.Address
 }
 
-func (s *SimpleList) epochSet(firstInEpoch bool, num uint64, proof []byte, call Syscall) (SimpleList, common.Hash, error) {
+func (s *SimpleList) epochSet(bool, uint64, []byte, *vm.EVM) (SimpleList, common.Hash, error) {
 	return *s, common.Hash{}, nil
 }
-func (s *SimpleList) onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error {
+func (s *SimpleList) onEpochBegin(bool, *types.Header, Syscall) error {
 	return nil
 }
-func (s *SimpleList) onCloseBlock(_header *types.Header, _address common.Address) error {
+func (s *SimpleList) onCloseBlock(*types.Header, common.Address) error {
 	return nil
 }
-func (s *SimpleList) defaultCaller(blockHash common.Hash) (Call, error) {
+func (s *SimpleList) defaultCaller(common.Hash) (Call, error) {
 	return nil, nil //simple list doesn't require calls
 }
 
@@ -323,7 +326,7 @@ func (s *SimpleList) defaultCaller(blockHash common.Hash) (Call, error) {
 //	func (s *SimpleList) countWithCaller(parentHash common.Hash, caller consensus.Call) (uint64, error) {
 //		return uint64(len(s.validators)), nil
 //	}
-func (s *SimpleList) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
+func (s *SimpleList) genesisEpochData(*types.Header, Syscall) ([]byte, error) {
 	return []byte{}, nil
 }
 
@@ -444,7 +447,7 @@ func NewValidatorSafeContract(contractAddress common.Address, posdaoTransition *
 //
 // Returns a list of contract calls to be pushed onto the new block.
 // func generateEngineTransactions(_firstInEpoch bool, _header *types.Header, _call SystemCall) -> Result<Vec<(Address, Bytes)>, EthcoreError>
-func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof []byte, call Syscall) (SimpleList, common.Hash, error) {
+func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof []byte, evm *vm.EVM) (SimpleList, common.Hash, error) {
 	if firstInEpoch {
 		var proof FirstValidatorSetProof
 		if err := rlp.DecodeBytes(setProof, &proof); err != nil {
@@ -454,7 +457,7 @@ func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof
 		if num == 0 {
 			return *NewSimpleList([]common.Address{proof.Header.Coinbase}), proof.Header.ParentHash, nil
 		}
-		l, ok := s.getListSyscall(call)
+		l, ok := s.getListSyscall(evm)
 		if !ok {
 			panic(1)
 		}
@@ -632,12 +635,12 @@ func (s *ValidatorSafeContract) defaultCaller(blockHash common.Hash) (Call, erro
 // 	return NewSimpleList(out0), true
 // }
 
-func (s *ValidatorSafeContract) getListSyscall(caller Syscall) (*SimpleList, bool) {
+func (s *ValidatorSafeContract) getListSyscall(evm *vm.EVM) (*SimpleList, bool) {
 	packed, err := s.abi.Pack("getValidators")
 	if err != nil {
 		panic(err)
 	}
-	out, err := caller(s.contractAddress, packed)
+	out, _, err := evm.Call(params.SystemAddress, s.contractAddress, packed, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
 	if err != nil {
 		panic(err)
 	}
@@ -862,8 +865,8 @@ type ValidatorContract struct {
 	posdaoTransition *uint64
 }
 
-func (s *ValidatorContract) epochSet(firstInEpoch bool, num uint64, proof []byte, call Syscall) (SimpleList, common.Hash, error) {
-	return s.validators.epochSet(firstInEpoch, num, proof, call)
+func (s *ValidatorContract) epochSet(firstInEpoch bool, num uint64, proof []byte, evm *vm.EVM) (SimpleList, common.Hash, error) {
+	return s.validators.epochSet(firstInEpoch, num, proof, evm)
 }
 func (s *ValidatorContract) defaultCaller(blockHash common.Hash) (Call, error) {
 	return s.validators.defaultCaller(blockHash)
