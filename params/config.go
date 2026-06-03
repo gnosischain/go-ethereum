@@ -1128,9 +1128,6 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 	if isForkBlockIncompatible(c.MuirGlacierBlock, newcfg.MuirGlacierBlock, headNumber) {
 		return newBlockCompatError("Muir Glacier fork block", c.MuirGlacierBlock, newcfg.MuirGlacierBlock)
 	}
-	if isForkBlockIncompatible(c.RewardContractBlock, newcfg.RewardContractBlock, headNumber) {
-		return newBlockCompatError("Reward Contract fork block", c.RewardContractBlock, newcfg.RewardContractBlock)
-	}
 	if isForkBlockIncompatible(c.BerlinBlock, newcfg.BerlinBlock, headNumber) {
 		return newBlockCompatError("Berlin fork block", c.BerlinBlock, newcfg.BerlinBlock)
 	}
