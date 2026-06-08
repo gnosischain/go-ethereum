@@ -22,6 +22,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
@@ -398,18 +399,22 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
 		// Apply AuRa pre-execution system calls, mirroring StateProcessor.Process,
 		// so that generated blocks reach the same pre-state as imported blocks.
+		// Only run for beacon engines whose inner engine is AuRa; calling ethash or
+		// clique Prepare here would corrupt header.Difficulty / header.Time.
 		if bcn, ok := b.engine.(*beacon.Beacon); ok {
-			bcn.SetAuraSyscall(MakeAuraSyscall(statedb, blockContext, cm.config, vm.Config{}))
-			// Balancer hack hardfork: rewrite bytecode at the fork transition
-			if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(b.header.Number, b.header.Time) {
-				if !config.IsBalancer(parent.Number(), parent.Time()) {
-					statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-					if config.Aura.BalancerTestRewriteAddress != nil {
-						statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			if _, ok := bcn.InnerEngine().(*aura.AuRa); ok {
+				bcn.SetAuraSyscall(MakeAuraSyscall(statedb, blockContext, cm.config, vm.Config{}))
+				// Balancer hack hardfork: rewrite bytecode at the fork transition
+				if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(b.header.Number, b.header.Time) {
+					if !config.IsBalancer(parent.Number(), parent.Time()) {
+						statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+						if config.Aura.BalancerTestRewriteAddress != nil {
+							statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+						}
 					}
 				}
+				bcn.AuraPrepare(cm, b.header, statedb)
 			}
-			bcn.AuraPrepare(cm, b.header, statedb)
 		}
 		if config.IsPrague(b.header.Number, b.header.Time) || config.IsUBT(b.header.Number, b.header.Time) {
 			// EIP-2935

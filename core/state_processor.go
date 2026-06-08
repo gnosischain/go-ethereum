@@ -93,27 +93,27 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	context = NewEVMBlockContext(header, p.chain, nil)
 	evm := vm.NewEVM(context, tracingStateDB, config, cfg)
 	defer evm.Release()
-	b, ok := p.chain.Engine().(*beacon.Beacon)
-	if ok {
-		// XXX check this is ok
-		b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
+	if b, ok := p.chain.Engine().(*beacon.Beacon); ok {
+		if _, ok := b.InnerEngine().(*aura.AuRa); ok {
+			b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
 
-		// Balancer hack hardfork: rewrite the bytecode at the fork transition
-		if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
-			parent := p.chain.GetHeaderByHash(block.ParentHash())
-			if parent == nil {
-				panic("couldn't find parent when trying to apply code rewrite")
-			}
-			// rewrite the code at the transition boundary
-			if !config.IsBalancer(parent.Number, parent.Time) {
-				statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-				// Extra address, used for testing
-				if config.Aura.BalancerTestRewriteAddress != nil {
-					statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			// Balancer hack hardfork: rewrite the bytecode at the fork transition
+			if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
+				parent := p.chain.GetHeaderByHash(block.ParentHash())
+				if parent == nil {
+					panic("couldn't find parent when trying to apply code rewrite")
+				}
+				// rewrite the code at the transition boundary
+				if !config.IsBalancer(parent.Number, parent.Time) {
+					statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+					// Extra address, used for testing
+					if config.Aura.BalancerTestRewriteAddress != nil {
+						statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+					}
 				}
 			}
+			b.AuraPrepare(p.chain, block.Header(), statedb)
 		}
-		b.AuraPrepare(p.chain, block.Header(), statedb)
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
