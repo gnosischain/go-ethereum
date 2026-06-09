@@ -537,6 +537,10 @@ func (s *ValidatorSafeContract) getListSyscall(evm *vm.EVM) (*SimpleList, bool) 
 	if err != nil {
 		panic(err)
 	}
+	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, evm.Context.Random != nil, evm.Context.Time)
+	if !rules.IsAmsterdam {
+		evm.Context.Transfer(evm.StateDB, params.SystemAddress, s.contractAddress, new(uint256.Int), &rules)
+	}
 	out, _, err := evm.Call(params.SystemAddress, s.contractAddress, packed, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
 	if err != nil {
 		panic(err)
