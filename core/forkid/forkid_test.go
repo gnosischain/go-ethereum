@@ -149,6 +149,53 @@ func TestCreation(t *testing.T) {
 				{123, 2000000000, ID{Hash: checksumToBytes(0x23aa1351), Next: 0}},          // Future BPO2 block
 			},
 		},
+		// Gnosis test cases
+		{
+			params.GnosisChainConfig,
+			core.DefaultGnosisGenesisBlock().ToBlock(),
+			[]testcase{
+				{0, 0, ID{Hash: checksumToBytes(0xf64909b1), Next: 1604400}},                    // Unsynced, last Frontier, Homestead, Tangerine, Spurious and Byzantium block
+				{1604399, 0, ID{Hash: checksumToBytes(0xf64909b1), Next: 1604400}},              // Last Byzantium block
+				{1604400, 0, ID{Hash: checksumToBytes(0xfde2d083), Next: 2508800}},              // First Constantinople block
+				{2508799, 0, ID{Hash: checksumToBytes(0xfde2d083), Next: 2508800}},              // Last Constantinople block
+				{2508800, 0, ID{Hash: checksumToBytes(0xfc1d8f2f), Next: 7298030}},              // First Petersburg block
+				{7298029, 0, ID{Hash: checksumToBytes(0xfc1d8f2f), Next: 7298030}},              // Last Petersburg block
+				{7298030, 0, ID{Hash: checksumToBytes(0x54d05e6c), Next: 9186425}},              // First Istanbul block
+				{9186424, 0, ID{Hash: checksumToBytes(0x54d05e6c), Next: 9186425}},              // Last Istanbul block
+				{9186425, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101500}},             // First RewardContract block
+				{16101499, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101500}},            // Last RewardContract block
+				{16101500, 0, ID{Hash: checksumToBytes(0x069a83d9), Next: 19040000}},            // First Berlin block
+				{19039999, 0, ID{Hash: checksumToBytes(0x069a83d9), Next: 19040000}},            // Last Berlin block
+				{19040000, 1690889659, ID{Hash: checksumToBytes(0x018479d3), Next: 1690889660}}, // First London block, last pre-Shanghai timestamp
+				{30000000, 1690889660, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}}, // First Shanghai block
+				{30000000, 1710181819, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}}, // Last Shanghai block
+				{30000000, 1710181820, ID{Hash: checksumToBytes(0x1384dfc1), Next: 1746021820}}, // First Cancun block
+				{30000000, 1746021819, ID{Hash: checksumToBytes(0x1384dfc1), Next: 1746021820}}, // Last Cancun block
+				{30000000, 1746021820, ID{Hash: checksumToBytes(0x2f095d4a), Next: 1766419900}}, // First Prague block
+				{30000000, 1766419899, ID{Hash: checksumToBytes(0x2f095d4a), Next: 1766419900}}, // Last Prague block
+				{30000000, 1766419900, ID{Hash: checksumToBytes(0xd00284ad), Next: 1776168380}}, // First Balancer block
+				{30000000, 1776168379, ID{Hash: checksumToBytes(0xd00284ad), Next: 1776168380}}, // Last Balancer block
+				{30000000, 1776168380, ID{Hash: checksumToBytes(0xcfca387c), Next: 0}},          // First Osaka block
+				{30000000, 2000000000, ID{Hash: checksumToBytes(0xcfca387c), Next: 0}},          // Future Osaka block
+			},
+		},
+		// Chiado test cases
+		{
+			params.ChiadoChainConfig,
+			core.DefaultChiadoGenesisBlock().ToBlock(),
+			[]testcase{
+				{0, 0, ID{Hash: checksumToBytes(0x50d39d7b), Next: 1684934220}},            // Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and London block
+				{123, 1684934219, ID{Hash: checksumToBytes(0x50d39d7b), Next: 1684934220}}, // Last pre-Shanghai timestamp
+				{123, 1684934220, ID{Hash: checksumToBytes(0xa15a4252), Next: 1706724940}}, // First Shanghai block
+				{123, 1706724939, ID{Hash: checksumToBytes(0xa15a4252), Next: 1706724940}}, // Last Shanghai block
+				{123, 1706724940, ID{Hash: checksumToBytes(0x5fbc16bc), Next: 1741254220}}, // First Cancun block
+				{123, 1741254219, ID{Hash: checksumToBytes(0x5fbc16bc), Next: 1741254220}}, // Last Cancun block
+				{123, 1741254220, ID{Hash: checksumToBytes(0x8ba51786), Next: 1773653580}}, // First Prague block
+				{123, 1773653579, ID{Hash: checksumToBytes(0x8ba51786), Next: 1773653580}}, // Last Prague block
+				{123, 1773653580, ID{Hash: checksumToBytes(0x71c457cd), Next: 0}},          // First Osaka block
+				{123, 2000000000, ID{Hash: checksumToBytes(0x71c457cd), Next: 0}},          // Future Osaka block
+			},
+		},
 	}
 	for i, tt := range tests {
 		for j, ttt := range tt.cases {
@@ -381,6 +428,243 @@ func TestValidation(t *testing.T) {
 		{params.MainnetChainConfig, 20999999, 1699999999, ID{Hash: checksumToBytes(0x71147644), Next: 1700000000}, ErrLocalIncompatibleOrStale},
 	}
 	genesis := core.DefaultGenesisBlock().ToBlock()
+	for i, tt := range tests {
+		filter := newFilter(tt.config, genesis, func() (uint64, uint64) { return tt.head, tt.time })
+		if err := filter(tt.id); err != tt.err {
+			t.Errorf("test %d: validation error mismatch: have %v, want %v", i, err, tt.err)
+		}
+	}
+}
+
+// TestGnosisValidation tests that a local Gnosis peer correctly validates and
+// accepts a remote fork ID.
+func TestGnosisValidation(t *testing.T) {
+	// Config that has not timestamp enabled.
+	legacyConfig := *params.GnosisChainConfig
+	legacyConfig.ShanghaiTime = nil
+	legacyConfig.CancunTime = nil
+	legacyConfig.PragueTime = nil
+	legacyConfig.BalancerTime = nil
+	legacyConfig.OsakaTime = nil
+
+	tests := []struct {
+		config *params.ChainConfig
+		head   uint64
+		time   uint64
+		id     ID
+		err    error
+	}{
+		//------------------
+		// Block based tests
+		//------------------
+
+		// Local is Gnosis London, remote announces the same. No future fork is announced.
+		{&legacyConfig, 19040000, 0, ID{Hash: checksumToBytes(0x018479d3), Next: 0}, nil},
+
+		// Local is Gnosis London, remote announces the same. Remote also announces a next fork
+		// at block 0xffffffff, but that is uncertain.
+		{&legacyConfig, 19040000, 0, ID{Hash: checksumToBytes(0x018479d3), Next: math.MaxUint64}, nil},
+
+		// Local is Gnosis currently in RewardContract only (so it's aware of Berlin), remote announces
+		// also RewardContract, but it's not yet aware of Berlin (e.g. non updated node before the fork).
+		// In this case we don't know if Berlin passed yet or not.
+		{&legacyConfig, 16101499, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 0}, nil},
+
+		// Local is Gnosis currently in RewardContract only (so it's aware of Berlin), remote announces
+		// also RewardContract, and it's also aware of Berlin (e.g. updated node before the fork). We
+		// don't know if Berlin passed yet (will pass) or not.
+		{&legacyConfig, 16101499, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101500}, nil},
+
+		// Local is Gnosis currently in RewardContract only (so it's aware of Berlin), remote announces
+		// also RewardContract, and it's also aware of some random fork (e.g. misconfigured Berlin). As
+		// neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+		{&legacyConfig, 16101499, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: math.MaxUint64}, nil},
+
+		// Local is Gnosis exactly on Berlin, remote announces RewardContract + knowledge about Berlin. Remote
+		// is simply out of sync, accept.
+		{&legacyConfig, 16101500, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101500}, nil},
+
+		// Local is Gnosis Berlin, remote announces RewardContract + knowledge about Berlin. Remote
+		// is simply out of sync, accept.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101500}, nil},
+
+		// Local is Gnosis Berlin, remote announces Istanbul + knowledge about RewardContract. Remote
+		// is definitely out of sync. It may or may not need the Berlin update, we don't know yet.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(0x54d05e6c), Next: 9186425}, nil},
+
+		// Local is Gnosis RewardContract, remote announces Berlin. Local is out of sync, accept.
+		{&legacyConfig, 16101499, 0, ID{Hash: checksumToBytes(0x069a83d9), Next: 0}, nil},
+
+		// Local is Gnosis Istanbul, remote announces RewardContract. Local is out of sync, accept.
+		{&legacyConfig, 9186424, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 0}, nil},
+
+		// Local is Gnosis Istanbul, remote announces Berlin without the RewardContract forkid.
+		// We may mismatch, but we still connect because RewardContract has not passed locally.
+		{&legacyConfig, 9186424, 0, ID{Hash: checksumToBytes(0x54d05e6c), Next: 16101500}, nil},
+
+		// Local is Gnosis RewardContract, remote announces Berlin without the RewardContract forkid.
+		// Remote needs software update.
+		{&legacyConfig, 9186425, 0, ID{Hash: checksumToBytes(0x54d05e6c), Next: 16101500}, ErrRemoteStale},
+
+		// Local is Gnosis Berlin, remote is Berlin without the RewardContract forkid. Remote has
+		// a different fork history.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(0x4058afc7), Next: 19040000}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Berlin. remote announces RewardContract but is not aware of further forks.
+		// Remote needs software update.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 0}, ErrRemoteStale},
+
+		// Local is Gnosis Berlin, and isn't aware of more forks. Remote announces Berlin +
+		// 0xffffffff. Local needs software update, reject.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(checksumUpdate(0x069a83d9, math.MaxUint64)), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Berlin, remote is random Berlin.
+		{&legacyConfig, 17000000, 0, ID{Hash: checksumToBytes(0x12345678), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis London, far in the future. Remote announces Gopherium (non existing fork)
+		// at some future block 88888888, for itself, but past block for local. Local is incompatible.
+		{&legacyConfig, 88888888, 0, ID{Hash: checksumToBytes(0x018479d3), Next: 88888888}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis RewardContract. Remote is also in RewardContract, but announces Gopherium
+		// at block 16101499, before Berlin. Local is incompatible.
+		{&legacyConfig, 16101499, 0, ID{Hash: checksumToBytes(0xb6e6cd81), Next: 16101499}, ErrLocalIncompatibleOrStale},
+
+		//------------------------------------
+		// Block to timestamp transition tests
+		//------------------------------------
+
+		// Local is Gnosis currently in London only (so it's aware of Shanghai), remote announces
+		// also London, but it's not yet aware of Shanghai (e.g. non updated node before the fork).
+		// In this case we don't know if Shanghai passed yet or not.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(0x018479d3), Next: 0}, nil},
+
+		// Local is Gnosis currently in London only (so it's aware of Shanghai), remote announces
+		// also London, and it's also aware of Shanghai (e.g. updated node before the fork). We
+		// don't know if Shanghai passed yet (will pass) or not.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(0x018479d3), Next: 1690889660}, nil},
+
+		// Local is Gnosis currently in London only (so it's aware of Shanghai), remote announces
+		// also London, and it's also aware of some random fork (e.g. misconfigured Shanghai). As
+		// neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(0x018479d3), Next: math.MaxUint64}, nil},
+
+		// Local is Gnosis exactly on Shanghai, remote announces London + knowledge about Shanghai. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x018479d3), Next: 1690889660}, nil},
+
+		// Local is Gnosis Shanghai, remote announces London + knowledge about Shanghai. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1690889661, ID{Hash: checksumToBytes(0x018479d3), Next: 1690889660}, nil},
+
+		// Local is Gnosis Shanghai, remote announces Berlin + knowledge about London. Remote
+		// is definitely out of sync. It may or may not need the Shanghai update, we don't know yet.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x069a83d9), Next: 19040000}, nil},
+
+		// Local is Gnosis London, remote announces Shanghai. Local is out of sync, accept.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(0x2efe91ba), Next: 0}, nil},
+
+		// Local is Gnosis RewardContract, remote announces London. Local is out of sync, accept.
+		{params.GnosisChainConfig, 16101499, 0, ID{Hash: checksumToBytes(0x018479d3), Next: 0}, nil},
+
+		// Local is Gnosis Shanghai. remote announces London but is not aware of further forks.
+		// Remote needs software update.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x018479d3), Next: 0}, ErrRemoteStale},
+
+		// Local is Gnosis London, and isn't aware of more forks. Remote announces London +
+		// 0xffffffff. Local needs software update, reject.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(checksumUpdate(0x018479d3, math.MaxUint64)), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis London, and is aware of Shanghai. Remote announces Shanghai +
+		// 0xffffffff. Local needs software update, reject.
+		{params.GnosisChainConfig, 19040000, 0, ID{Hash: checksumToBytes(checksumUpdate(0x2efe91ba, math.MaxUint64)), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis London. Remote is also in London, but announces Gopherium
+		// at timestamp 1690000000, before Shanghai. Local is incompatible.
+		{params.GnosisChainConfig, 30000000, 1690000000, ID{Hash: checksumToBytes(0x018479d3), Next: 1690000000}, ErrLocalIncompatibleOrStale},
+
+		//----------------------
+		// Timestamp based tests
+		//----------------------
+
+		// Local is Gnosis Shanghai, remote announces the same. No future fork is announced.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x2efe91ba), Next: 0}, nil},
+
+		// Local is Gnosis Shanghai, remote announces the same. Remote also announces a next fork
+		// at time 0xffffffff, but that is uncertain.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x2efe91ba), Next: math.MaxUint64}, nil},
+
+		// Local is Gnosis currently in Shanghai only (so it's aware of Cancun), remote announces
+		// also Shanghai, but it's not yet aware of Cancun (e.g. non updated node before the fork).
+		// In this case we don't know if Cancun passed yet or not.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x2efe91ba), Next: 0}, nil},
+
+		// Local is Gnosis currently in Shanghai only (so it's aware of Cancun), remote announces
+		// also Shanghai, and it's also aware of Cancun (e.g. updated node before the fork). We
+		// don't know if Cancun passed yet (will pass) or not.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}, nil},
+
+		// Local is Gnosis currently in Shanghai only (so it's aware of Cancun), remote announces
+		// also Shanghai, and it's also aware of some random fork (e.g. misconfigured Cancun). As
+		// neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x2efe91ba), Next: math.MaxUint64}, nil},
+
+		// Local is Gnosis exactly on Cancun, remote announces Shanghai + knowledge about Cancun. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1710181820, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}, nil},
+
+		// Local is Gnosis Cancun, remote announces Shanghai + knowledge about Cancun. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1710181821, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}, nil},
+
+		// Local is Gnosis Prague, remote announces Shanghai + knowledge about Cancun. Remote
+		// is definitely out of sync. It may or may not need the Prague update, we don't know yet.
+		{params.GnosisChainConfig, 30000000, 1746021820, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1710181820}, nil},
+
+		// Local is Gnosis Shanghai, remote announces Cancun. Local is out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x1384dfc1), Next: 0}, nil},
+
+		// Local is Gnosis Shanghai, remote announces Prague. Local is out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x2f095d4a), Next: 0}, nil},
+
+		// Local is Gnosis Prague, remote announces the same and is aware of Balancer.
+		{params.GnosisChainConfig, 30000000, 1760000000, ID{Hash: checksumToBytes(0x2f095d4a), Next: 1766419900}, nil},
+
+		// Local is Gnosis Balancer, remote announces Prague + knowledge about Balancer. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1766419900, ID{Hash: checksumToBytes(0x2f095d4a), Next: 1766419900}, nil},
+
+		// Local is Gnosis Balancer. remote announces Prague but is not aware of further forks.
+		// Remote needs software update.
+		{params.GnosisChainConfig, 30000000, 1766419900, ID{Hash: checksumToBytes(0x2f095d4a), Next: 0}, ErrRemoteStale},
+
+		// Local is Gnosis Osaka, remote announces Balancer + knowledge about Osaka. Remote
+		// is simply out of sync, accept.
+		{params.GnosisChainConfig, 30000000, 1776168380, ID{Hash: checksumToBytes(0xd00284ad), Next: 1776168380}, nil},
+
+		// Local is Gnosis Cancun. remote announces Shanghai but is not aware of further forks.
+		// Remote needs software update.
+		{params.GnosisChainConfig, 30000000, 1710181820, ID{Hash: checksumToBytes(0x2efe91ba), Next: 0}, ErrRemoteStale},
+
+		// Local is Gnosis Shanghai, and isn't aware of more forks. Remote announces Shanghai +
+		// 0xffffffff. Local needs software update, reject.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(checksumUpdate(0x2efe91ba, math.MaxUint64)), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Shanghai, and is aware of Cancun. Remote announces Cancun +
+		// 0xffffffff. Local needs software update, reject.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(checksumUpdate(0x1384dfc1, math.MaxUint64)), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Shanghai, remote is random Shanghai.
+		{params.GnosisChainConfig, 30000000, 1690889660, ID{Hash: checksumToBytes(0x12345678), Next: 0}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Osaka, far in the future. Remote announces Gopherium (non existing fork)
+		// at some future timestamp 2000000000, for itself, but past block for local. Local is incompatible.
+		{params.GnosisChainConfig, 30000000, 2000000000, ID{Hash: checksumToBytes(0xcfca387c), Next: 2000000000}, ErrLocalIncompatibleOrStale},
+
+		// Local is Gnosis Shanghai. Remote is also in Shanghai, but announces Gopherium
+		// at timestamp 1700000000, before Cancun. Local is incompatible.
+		{params.GnosisChainConfig, 30000000, 1700000000, ID{Hash: checksumToBytes(0x2efe91ba), Next: 1700000000}, ErrLocalIncompatibleOrStale},
+	}
+	genesis := core.DefaultGnosisGenesisBlock().ToBlock()
 	for i, tt := range tests {
 		filter := newFilter(tt.config, genesis, func() (uint64, uint64) { return tt.head, tt.time })
 		if err := filter(tt.id); err != tt.err {

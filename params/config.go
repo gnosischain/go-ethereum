@@ -446,6 +446,7 @@ type ChainConfig struct {
 	PetersburgBlock     *big.Int `json:"petersburgBlock,omitempty"`     // Petersburg switch block (nil = same as Constantinople)
 	IstanbulBlock       *big.Int `json:"istanbulBlock,omitempty"`       // Istanbul switch block (nil = no fork, 0 = already on istanbul)
 	MuirGlacierBlock    *big.Int `json:"muirGlacierBlock,omitempty"`    // Eip-2384 (bomb delay) switch block (nil = no fork, 0 = already activated)
+	RewardContractBlock *big.Int `json:"rewardContractBlock,omitempty"` // RewardContract switch block (nil = no fork, 0 = already activated)
 	BerlinBlock         *big.Int `json:"berlinBlock,omitempty"`         // Berlin switch block (nil = no fork, 0 = already on berlin)
 	LondonBlock         *big.Int `json:"londonBlock,omitempty"`         // London switch block (nil = no fork, 0 = already on london)
 	ArrowGlacierBlock   *big.Int `json:"arrowGlacierBlock,omitempty"`   // Eip-4345 (bomb delay) switch block (nil = no fork, 0 = already activated)
@@ -557,6 +558,9 @@ func (c *ChainConfig) String() string {
 	if c.MuirGlacierBlock != nil {
 		result += fmt.Sprintf(", MuirGlacierBlock: %v", c.MuirGlacierBlock)
 	}
+	if c.RewardContractBlock != nil {
+		result += fmt.Sprintf(", RewardContractBlock: %v", c.RewardContractBlock)
+	}
 	if c.BerlinBlock != nil {
 		result += fmt.Sprintf(", BerlinBlock: %v", c.BerlinBlock)
 	}
@@ -656,6 +660,9 @@ func (c *ChainConfig) Description() string {
 	banner += fmt.Sprintf(" - Istanbul:                    #%-8v\n", c.IstanbulBlock)
 	if c.MuirGlacierBlock != nil {
 		banner += fmt.Sprintf(" - Muir Glacier:                #%-8v\n", c.MuirGlacierBlock)
+	}
+	if c.RewardContractBlock != nil {
+		banner += fmt.Sprintf(" - Reward Contract:             #%-8v\n", c.RewardContractBlock)
 	}
 	banner += fmt.Sprintf(" - Berlin:                      #%-8v\n", c.BerlinBlock)
 	banner += fmt.Sprintf(" - London:                      #%-8v\n", c.LondonBlock)
@@ -988,6 +995,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "petersburgBlock", block: c.PetersburgBlock},
 		{name: "istanbulBlock", block: c.IstanbulBlock},
 		{name: "muirGlacierBlock", block: c.MuirGlacierBlock, optional: true},
+		{name: "rewardContractBlock", block: c.RewardContractBlock, optional: true},
 		{name: "berlinBlock", block: c.BerlinBlock},
 		{name: "londonBlock", block: c.LondonBlock},
 		{name: "arrowGlacierBlock", block: c.ArrowGlacierBlock, optional: true},
