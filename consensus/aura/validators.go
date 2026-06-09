@@ -47,11 +47,6 @@ type client interface {
 
 type ValidatorSet interface {
 
-	// Get the default "Call" helper, for use in general operation.
-	// TODO [keorn]: this is a hack intended to migrate off of
-	// a strict dependency on state always being available.
-	defaultCaller(blockHash common.Hash) (Call, error)
-
 	// Called for each new block this node is creating.  If this block is
 	// the first block of an epoch, this is called *after* `on_epoch_begin()`,
 	// but with the same parameters.
@@ -67,9 +62,6 @@ type ValidatorSet interface {
 	//
 	// `first` is true if this is the first block in the set.
 	onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error
-
-	// Called on the close of every block.
-	onCloseBlock(_header *types.Header, _address common.Address) error
 
 	// Draws a validator nonce modulo number of validators.
 	// getWithCaller(parentHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error)
@@ -180,21 +172,6 @@ type ValidatorSet interface {
 	*/
 }
 
-// func get(s ValidatorSet, h common.Hash, nonce uint, call consensus.Call) (common.Address, error) {
-// 	//d, err := s.defaultCaller(h)
-// 	//if err != nil {
-// 	//	return common.Address{}, err
-// 	//}
-// 	return s.getWithCaller(h, nonce, call)
-// }
-// func count(s ValidatorSet, h common.Hash, call consensus.Call) (uint64, error) {
-// 	//d, err := s.defaultCaller(h)
-// 	//if err != nil {
-// 	//	return 0, err
-// 	//}
-// 	return s.countWithCaller(h, call)
-// }
-
 // nolint
 type MultiItem struct {
 	num  uint64
@@ -226,25 +203,6 @@ func NewMulti(m map[uint64]ValidatorSet) *Multi {
 	return multi
 }
 
-func (s *Multi) defaultCaller(blockHash common.Hash) (Call, error) {
-	set, ok := s.correctSet(blockHash)
-	if !ok {
-		return nil, fmt.Errorf("no validator set for given blockHash: %x", blockHash)
-	}
-	return set.defaultCaller(blockHash)
-}
-
-// func (s *Multi) getWithCaller(parentHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error) {
-// 	panic("not implemented")
-// }
-// func (s *Multi) countWithCaller(parentHash common.Hash, caller consensus.Call) (uint64, error) {
-// 	set, ok := s.correctSet(parentHash)
-// 	if !ok {
-// 		return math.MaxUint64, nil
-// 	}
-// 	return set.countWithCaller(parentHash, caller)
-// }
-
 func (s *Multi) correctSet(blockHash common.Hash) (ValidatorSet, bool) {
 	parent := s.parent(blockHash)
 	if parent == nil {
@@ -269,11 +227,6 @@ func (s *Multi) get(num uint64) (firstInEpoch bool, set ValidatorSet) {
 	block, set := s.correctSetByNumber(num)
 	firstInEpoch = block == num
 	return firstInEpoch, set
-}
-
-func (s *Multi) onCloseBlock(header *types.Header, address common.Address) error {
-	_, set := s.get(header.Number.Uint64())
-	return set.onCloseBlock(header, address)
 }
 
 // TODO: do we need add `proof` argument?
@@ -309,23 +262,10 @@ func (s *SimpleList) epochSet(bool, uint64, []byte, *vm.EVM) (SimpleList, common
 func (s *SimpleList) onEpochBegin(bool, *types.Header, Syscall) error {
 	return nil
 }
-func (s *SimpleList) onCloseBlock(*types.Header, common.Address) error {
-	return nil
-}
 func (s *SimpleList) defaultCaller(common.Hash) (Call, error) {
 	return nil, nil //simple list doesn't require calls
 }
 
-//	func (s *SimpleList) getWithCaller(parentHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error) {
-//		if len(s.validators) == 0 {
-//			return common.Address{}, fmt.Errorf("cannot operate with an empty validator set")
-//		}
-//		return s.validators[nonce%uint(len(s.validators))], nil
-//	}
-//
-//	func (s *SimpleList) countWithCaller(parentHash common.Hash, caller consensus.Call) (uint64, error) {
-//		return uint64(len(s.validators)), nil
-//	}
 func (s *SimpleList) genesisEpochData(*types.Header, Syscall) ([]byte, error) {
 	return []byte{}, nil
 }
@@ -592,49 +532,6 @@ func (s *ValidatorSafeContract) defaultCaller(blockHash common.Hash) (Call, erro
 	}, nil
 }
 
-// func (s *ValidatorSafeContract) getWithCaller(blockHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error) {
-// 	set, ok := s.validators.Get(blockHash)
-// 	if ok {
-// 		return get(set, blockHash, nonce, caller)
-// 	}
-
-// 	list, ok := s.getList(caller)
-// 	if !ok {
-// 		return common.Address{}, nil
-// 	}
-// 	s.validators.Add(blockHash, list)
-// 	return get(list, blockHash, nonce, caller)
-// }
-// func (s *ValidatorSafeContract) countWithCaller(parentHash common.Hash, caller consensus.Call) (uint64, error) {
-// 	set, ok := s.validators.Get(parentHash)
-// 	if ok {
-// 		return count(set, parentHash, caller)
-// 	}
-// 	list, ok := s.getList(caller)
-// 	if !ok {
-// 		return math.MaxUint64, nil
-// 	}
-// 	s.validators.Add(parentHash, list)
-// 	return count(list, parentHash, caller)
-// }
-
-// func (s *ValidatorSafeContract) getList(caller consensus.Call) (*SimpleList, bool) {
-// 	packed, err := s.abi.Pack("getValidators")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	out, err := caller(s.contractAddress, packed)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	res, err := s.abi.Unpack("getValidators", out)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	out0 := *abi.ConvertType(res[0], new([]common.Address)).(*[]common.Address)
-// 	return NewSimpleList(out0), true
-// }
-
 func (s *ValidatorSafeContract) getListSyscall(evm *vm.EVM) (*SimpleList, bool) {
 	packed, err := s.abi.Pack("getValidators")
 	if err != nil {
@@ -809,55 +706,6 @@ const EVENT_NAME = "InitiateChange(bytes32,address[])"
 
 var EVENT_NAME_HASH = crypto.Keccak256Hash([]byte(EVENT_NAME))
 
-func (s *ValidatorSafeContract) onCloseBlock(header *types.Header, ourAddress common.Address) error {
-	// Skip the rest of the function unless there has been a transition to POSDAO AuRa.
-	if s.posdaoTransition != nil && header.Number.Uint64() < *s.posdaoTransition {
-		log.Trace("Skipping resending of queued malicious behavior reports")
-		return nil
-	}
-	/*
-		err := s.reportQueue.filter(s.abi, s.client, ourAddress, s.contractAddress)
-		if err != nil {
-			return err
-		}
-		s.reportQueue.truncate()
-	*/
-
-	/*
-	   let mut resent_reports_in_block = self.resent_reports_in_block.lock();
-
-	   // Skip at least one block after sending malicious reports last time.
-	   if header.number() > *resent_reports_in_block + REPORTS_SKIP_BLOCKS {
-	       *resent_reports_in_block = header.number();
-	       let mut nonce = client.latest_nonce(our_address);
-	       for (address, block, data) in report_queue.iter() {
-	           debug!(target: "engine", "Retrying to report validator {} for misbehavior on block {} with nonce {}.",
-	              address, block, nonce);
-	           while match self.transact(data.clone(), nonce) {
-	               Ok(()) => false,
-	               Err(EthcoreError(
-	                   EthcoreErrorKind::Transaction(transaction::Error::Old),
-	                   _,
-	               )) => true,
-	               Err(err) => {
-	                   warn!(target: "engine", "Cannot report validator {} for misbehavior on block {}: {}",
-	                     address, block, err);
-	                   false
-	               }
-	           } {
-	               warn!(target: "engine", "Nonce {} already used. Incrementing.", nonce);
-	               nonce += U256::from(1);
-	           }
-	           nonce += U256::from(1);
-	       }
-	   }
-
-	   Ok(())
-
-	*/
-	return nil
-}
-
 // ValidatorContract a validator contract with reporting.
 type ValidatorContract struct {
 	contractAddress  common.Address
@@ -867,9 +715,6 @@ type ValidatorContract struct {
 
 func (s *ValidatorContract) epochSet(firstInEpoch bool, num uint64, proof []byte, evm *vm.EVM) (SimpleList, common.Hash, error) {
 	return s.validators.epochSet(firstInEpoch, num, proof, evm)
-}
-func (s *ValidatorContract) defaultCaller(blockHash common.Hash) (Call, error) {
-	return s.validators.defaultCaller(blockHash)
 }
 
 //	func (s *ValidatorContract) getWithCaller(parentHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error) {
@@ -881,9 +726,6 @@ func (s *ValidatorContract) defaultCaller(blockHash common.Hash) (Call, error) {
 //	}
 func (s *ValidatorContract) onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error {
 	return s.validators.onEpochBegin(firstInEpoch, header, caller)
-}
-func (s *ValidatorContract) onCloseBlock(header *types.Header, address common.Address) error {
-	return s.validators.onCloseBlock(header, address)
 }
 func (s *ValidatorContract) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
 	return s.validators.genesisEpochData(header, call)
