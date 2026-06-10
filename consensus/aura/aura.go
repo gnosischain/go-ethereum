@@ -790,36 +790,7 @@ func (c *AuRa) Close() error {
 // APIs implements consensus.Engine, returning the user facing RPC API to allow
 // controlling the signer voting.
 func (c *AuRa) APIs(chain consensus.ChainHeaderReader) []rpc.API {
-	return []rpc.API{
-		//{
-		//Namespace: "clique",
-		//Version:   "1.0",
-		//Service:   &API{chain: chain, clique: c},
-		//Public:    false,
-		//}
-	}
-}
-
-// nolint
-func (c *AuRa) emptySteps(fromStep, toStep uint64, parentHash common.Hash) []EmptyStep {
-	from := EmptyStep{step: fromStep + 1, parentHash: parentHash}
-	to := EmptyStep{step: toStep}
-	res := []EmptyStep{}
-	if to.LessOrEqual(&from) {
-		return res
-	}
-
-	c.EmptyStepsSet.Sort()
-	c.EmptyStepsSet.ForEach(func(i int, step *EmptyStep) {
-		if step.Less(&from) || (&to).Less(step) {
-			return
-		}
-		if step.parentHash != parentHash {
-			return
-		}
-		res = append(res, *step)
-	})
-	return res
+	return []rpc.API{}
 }
 
 func (c *AuRa) CalculateRewards(_ *params.ChainConfig, header *types.Header, _ []*types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
