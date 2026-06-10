@@ -273,8 +273,6 @@ type AuRa struct {
 	certifierLock sync.RWMutex
 
 	Syscall Syscall
-
-	isPos bool
 }
 
 func SortedKeys[K constraints.Ordered, V any](m map[K]V) []K {
@@ -702,7 +700,7 @@ func (c *AuRa) Authorize(signer common.Address) {
 }
 
 func (c *AuRa) GenesisEpochData(header *types.Header) ([]byte, error) {
-	setProof, err := c.cfg.Validators.genesisEpochData(header, c.Syscall)
+	setProof, err := c.cfg.Validators.genesisEpochData(header)
 	if err != nil {
 		return nil, err
 	}
@@ -856,10 +854,6 @@ func (c *AuRa) ExecuteSystemWithdrawals(evm *vm.EVM, withdrawals []*types.Withdr
 
 	_, _, err = evm.Call(params.SystemAddress, *c.cfg.WithdrawalContractAddress, packed, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
 	return err
-}
-
-func (c *AuRa) SetMerged(merged bool) {
-	c.isPos = merged
 }
 
 // An empty step message that is included in a seal, the only difference is that it doesn't include
