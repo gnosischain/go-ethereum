@@ -174,7 +174,7 @@ func (e *EpochManager) noteNewEpoch() { e.force = true }
 // zoomValidators - Zooms to the epoch after the header with the given hash. Returns true if succeeded, false otherwise.
 // It's analog of zoom_to_after function in OE, but doesn't require external locking
 // nolint
-func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, call Syscall) (*RollingFinality, uint64, bool) {
+func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, evm *vm.EVM) (*RollingFinality, uint64, bool) {
 	var lastWasParent bool
 	if e.finalityChecker.lastPushed != nil {
 		lastWasParent = *e.finalityChecker.lastPushed == hash
@@ -211,7 +211,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		}
 
 		// use signal number so multi-set first calculation is correct.
-		list, _, err := validators.epochSet(first, proof.SignalNumber, proof.SetProof, call)
+		list, _, err := validators.epochSet(first, proof.SignalNumber, proof.SetProof, evm)
 		if err != nil {
 			panic(fmt.Errorf("proof produced by this engine is invalid: %w", err))
 		}
@@ -560,7 +560,7 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	}
 	// check_and_lock_block -> check_epoch_end_signal END
 
-	finalized := buildFinality(c.EpochManager, chain, c.e, c.cfg.Validators, header, c.Syscall)
+	finalized := buildFinality(c.EpochManager, chain, c.e, c.cfg.Validators, header, evm)
 	c.EpochManager.finalityChecker.print(header.Number.Uint64())
 	epochEndProof, err := isEpochEnd(chain, c.e, finalized, header)
 	if err != nil {
@@ -575,9 +575,9 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	}
 }
 
-func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, header *types.Header, syscall Syscall) []unAssembledHeader {
+func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, header *types.Header, evm *vm.EVM) []unAssembledHeader {
 	// commit_block -> aura.build_finality
-	_, _, ok := e.zoomToAfter(chain, er, validators, header.ParentHash, syscall)
+	_, _, ok := e.zoomToAfter(chain, er, validators, header.ParentHash, evm)
 	if !ok {
 		return []unAssembledHeader{}
 	}
