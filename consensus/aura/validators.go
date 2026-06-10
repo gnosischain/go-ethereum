@@ -67,7 +67,7 @@ type ValidatorSet interface {
 	epochSet(firstInEpoch bool, num uint64, setProof []byte, evm *vm.EVM) (SimpleList, common.Hash, error)
 
 	// Extract genesis epoch data from the genesis state and header.
-	genesisEpochData(header *types.Header, call Syscall) ([]byte, error)
+	genesisEpochData(header *types.Header) ([]byte, error)
 
 	/*
 	 // Returns the current number of validators.
@@ -208,9 +208,9 @@ func (s *Multi) epochSet(firstInEpoch bool, num uint64, proof []byte, evm *vm.EV
 	firstInEpoch = setBlock == num
 	return set.epochSet(firstInEpoch, num, proof, evm)
 }
-func (s *Multi) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
+func (s *Multi) genesisEpochData(header *types.Header) ([]byte, error) {
 	_, set := s.correctSetByNumber(0)
-	return set.genesisEpochData(header, call)
+	return set.genesisEpochData(header)
 }
 
 func (s *Multi) onEpochBegin(_ bool, header *types.Header, caller Syscall) error {
@@ -235,7 +235,7 @@ func (s *SimpleList) onEpochBegin(bool, *types.Header, Syscall) error {
 	return nil
 }
 
-func (s *SimpleList) genesisEpochData(*types.Header, Syscall) ([]byte, error) {
+func (s *SimpleList) genesisEpochData(*types.Header) ([]byte, error) {
 	return []byte{}, nil
 }
 
@@ -375,7 +375,7 @@ func (s *ValidatorSafeContract) getListSyscall(evm *vm.EVM) (*SimpleList, bool) 
 	return NewSimpleList(out0), true
 }
 
-func (s *ValidatorSafeContract) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
+func (s *ValidatorSafeContract) genesisEpochData(header *types.Header) ([]byte, error) {
 	return rlp.EncodeToBytes(FirstValidatorSetProof{Header: header, ContractAddress: s.contractAddress})
 }
 
@@ -546,8 +546,8 @@ func (s *ValidatorContract) epochSet(firstInEpoch bool, num uint64, proof []byte
 func (s *ValidatorContract) onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error {
 	return s.validators.onEpochBegin(firstInEpoch, header, caller)
 }
-func (s *ValidatorContract) genesisEpochData(header *types.Header, call Syscall) ([]byte, error) {
-	return s.validators.genesisEpochData(header, call)
+func (s *ValidatorContract) genesisEpochData(header *types.Header) ([]byte, error) {
+	return s.validators.genesisEpochData(header)
 }
 func (s *ValidatorContract) signalEpochEnd(firstInEpoch bool, header *types.Header, r types.Receipts) ([]byte, error) {
 	return s.validators.signalEpochEnd(firstInEpoch, header, r)
