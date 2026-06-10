@@ -181,7 +181,6 @@ type MultiItem struct {
 
 type Multi struct {
 	sorted []MultiItem
-	parent func(common.Hash) *types.Header
 }
 
 func (s *Multi) Less(i, j int) bool { return s.sorted[i].num < s.sorted[j].num }
@@ -203,15 +202,6 @@ func NewMulti(m map[uint64]ValidatorSet) *Multi {
 	return multi
 }
 
-func (s *Multi) correctSet(blockHash common.Hash) (ValidatorSet, bool) {
-	parent := s.parent(blockHash)
-	if parent == nil {
-		return nil, false
-	}
-	_, set := s.correctSetByNumber(parent.Number.Uint64())
-	return set, set != nil
-}
-
 func (s *Multi) correctSetByNumber(parentNumber uint64) (uint64, ValidatorSet) {
 	// get correct set by block number, along with block number at which
 	// this set was activated.
@@ -221,12 +211,6 @@ func (s *Multi) correctSetByNumber(parentNumber uint64) (uint64, ValidatorSet) {
 		}
 	}
 	panic("constructor validation ensures that there is at least one validator set for block 0; block 0 is less than any uint; qed")
-}
-
-func (s *Multi) get(num uint64) (firstInEpoch bool, set ValidatorSet) {
-	block, set := s.correctSetByNumber(num)
-	firstInEpoch = block == num
-	return firstInEpoch, set
 }
 
 // TODO: do we need add `proof` argument?
@@ -261,9 +245,6 @@ func (s *SimpleList) epochSet(bool, uint64, []byte, *vm.EVM) (SimpleList, common
 }
 func (s *SimpleList) onEpochBegin(bool, *types.Header, Syscall) error {
 	return nil
-}
-func (s *SimpleList) defaultCaller(common.Hash) (Call, error) {
-	return nil, nil //simple list doesn't require calls
 }
 
 func (s *SimpleList) genesisEpochData(*types.Header, Syscall) ([]byte, error) {
