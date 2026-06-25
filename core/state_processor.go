@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -95,9 +94,6 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	defer evm.Release()
 	b, ok := p.chain.Engine().(*beacon.Beacon)
 	if ok {
-		// XXX check this is ok
-		b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
-
 		// Balancer hack hardfork: rewrite the bytecode at the fork transition
 		if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
 			parent := p.chain.GetHeaderByHash(block.ParentHash())
@@ -113,7 +109,10 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 				}
 			}
 		}
-		b.AuraPrepare(p.chain, block.Header(), statedb)
+		// @chetna: you found it, you get to claim the fix
+		if err := b.AuraPrepare(config, block.Header(), statedb); err != nil {
+			return nil, fmt.Errorf("error running AuRa pre-STF boilerplate")
+		}
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
@@ -425,22 +424,4 @@ func AssembleBlock(engine consensus.Engine, chain consensus.ChainHeaderReader, h
 	engine.Finalize(chain, header, state, body, receipts, evm)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	return types.NewBlock(header, body, receipts, trie.NewStackTrie(nil))
-}
-
-func MakeAuraSyscall(statedb vm.StateDB, context vm.BlockContext, chainConfig *params.ChainConfig, vmConfig vm.Config) aura.Syscall {
-	return func(contractaddr common.Address, data []byte) ([]byte, error) {
-		evm := vm.NewEVM(context, statedb, chainConfig, vmConfig)
-		// On Pre-Amsterdam blocks, explicitly call transfer even for zero-value to match pre-merge
-		// AuRa syscall behavior
-		rules := chainConfig.Rules(context.BlockNumber, context.Random != nil, context.Time)
-		if !rules.IsAmsterdam {
-			context.Transfer(statedb, params.SystemAddress, contractaddr, new(uint256.Int), &rules)
-		}
-		ret, _, err := evm.Call(params.SystemAddress, contractaddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
-		if err != nil {
-			panic(err)
-		}
-		statedb.Finalise(true)
-		return ret, err
-	}
 }

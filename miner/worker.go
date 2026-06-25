@@ -311,8 +311,6 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 		if header.Difficulty == nil {
 			header.Difficulty = common.Big0
 		}
-		context := core.NewEVMBlockContext(header, miner.chain, nil)
-		b.SetAuraSyscall(core.MakeAuraSyscall(state, context, miner.chainConfig, *miner.chain.GetVMConfig()))
 
 		// Balancer hack hardfork: rewrite the bytecode at the fork transition
 		if miner.chainConfig.Aura != nil && miner.chainConfig.Aura.BalancerRewriteAddress != nil && miner.chainConfig.IsBalancer(header.Number, header.Time) {
@@ -323,6 +321,10 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 				if miner.chainConfig.Aura.BalancerTestRewriteAddress != nil {
 					state.SetCode(*miner.chainConfig.Aura.BalancerTestRewriteAddress, miner.chainConfig.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
 				}
+			}
+
+			if err := b.AuraPrepare(miner.chainConfig, header, state); err != nil {
+				return nil, fmt.Errorf("error running AuRa pre-STF boilerplate")
 			}
 		}
 	}

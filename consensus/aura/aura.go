@@ -486,13 +486,17 @@ func (c *AuRa) VerifyUncles(chain consensus.ChainReader, header *types.Block) er
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) error {
+	return nil
+}
+
+func (c *AuRa) AuraPrepare(chainConfig *params.ChainConfig, header *types.Header, statedb *state.StateDB) error {
 	blockNum := header.Number.Uint64()
 	for address, rewrittenCode := range c.cfg.RewriteBytecode[blockNum] {
 		statedb.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
 	}
 
 	c.certifierLock.Lock()
-	if c.cfg.Registrar != nil && c.certifier == nil && chain.Config().IsLondon(header.Number) {
+	if c.cfg.Registrar != nil && c.certifier == nil && chainConfig.IsLondon(header.Number) {
 		c.certifier = getCertifier(*c.cfg.Registrar, c.Syscall)
 	}
 	c.certifierLock.Unlock()

@@ -450,10 +450,11 @@ func (beacon *Beacon) SetAuraSyscall(sc aura.Syscall) {
 	}
 }
 
-func (beacon *Beacon) AuraPrepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) {
+func (beacon *Beacon) AuraPrepare(chainConfig *params.ChainConfig, header *types.Header, statedb *state.StateDB) error {
 	// mark down if the current chain has merged
-	if _, ok := beacon.ethone.(*aura.AuRa); !ok {
+	ethone, ok := beacon.ethone.(*aura.AuRa)
+	if !ok {
 		panic("AuraPrepare called in a non-Aura context")
 	}
-	beacon.ethone.Prepare(chain, header, statedb)
+	return ethone.AuraPrepare(chainConfig, header, statedb)
 }
