@@ -252,7 +252,18 @@ func epochTransitionFor(chain consensus.ChainHeaderReader, e *NonTransactionalEp
 	return EpochTransition{BlockNumber: num, BlockHash: hash, ProofRlp: transitionProof}, true
 }
 
-type Syscall func(common.Address, []byte) ([]byte, error)
+func systemCall(evm *vm.EVM, contractAddr common.Address, data []byte) ([]byte, error) {
+	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, evm.Context.Random != nil, evm.Context.Time)
+	if !rules.IsAmsterdam {
+		evm.Context.Transfer(evm.StateDB, params.SystemAddress, contractAddr, new(uint256.Int), &rules)
+	}
+	ret, _, err := evm.Call(params.SystemAddress, contractAddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
+	if err != nil {
+		panic(err)
+	}
+	evm.StateDB.Finalise(true)
+	return ret, err
+}
 
 // AuRa
 // nolint
@@ -271,8 +282,6 @@ type AuRa struct {
 
 	certifier     *common.Address // certifies service transactions
 	certifierLock sync.RWMutex
-
-	Syscall Syscall
 }
 
 func SortedKeys[K constraints.Ordered, V any](m map[K]V) []K {
@@ -489,15 +498,15 @@ func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, 
 	return nil
 }
 
-func (c *AuRa) AuraPrepare(chainConfig *params.ChainConfig, header *types.Header, statedb *state.StateDB) error {
+func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header) error {
 	blockNum := header.Number.Uint64()
 	for address, rewrittenCode := range c.cfg.RewriteBytecode[blockNum] {
-		statedb.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
+		evm.StateDB.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
 	}
 
 	c.certifierLock.Lock()
-	if c.cfg.Registrar != nil && c.certifier == nil && chainConfig.IsLondon(header.Number) {
-		c.certifier = getCertifier(*c.cfg.Registrar, c.Syscall)
+	if c.cfg.Registrar != nil && c.certifier == nil && evm.ChainConfig().IsLondon(header.Number) {
+		c.certifier = getCertifier(*c.cfg.Registrar, evm)
 	}
 	c.certifierLock.Unlock()
 
@@ -522,7 +531,7 @@ func (c *AuRa) AuraPrepare(chainConfig *params.ChainConfig, header *types.Header
 	if !isEpochBegin {
 		return nil
 	}
-	return c.cfg.Validators.onEpochBegin(isEpochBegin, header, c.Syscall)
+	return c.cfg.Validators.onEpochBegin(header, evm)
 	// check_and_lock_block -> check_epoch_end_signal END (before enact)
 }
 

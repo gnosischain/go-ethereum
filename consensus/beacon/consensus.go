@@ -444,17 +444,10 @@ func (beacon *Beacon) SetThreads(threads int) {
 	}
 }
 
-func (beacon *Beacon) SetAuraSyscall(sc aura.Syscall) {
-	if a, ok := beacon.ethone.(*aura.AuRa); ok {
-		a.Syscall = sc
-	}
-}
-
-func (beacon *Beacon) AuraPrepare(chainConfig *params.ChainConfig, header *types.Header, statedb *state.StateDB) error {
-	// mark down if the current chain has merged
+func (beacon *Beacon) AuraPrepare(evm *vm.EVM, header *types.Header) error {
 	ethone, ok := beacon.ethone.(*aura.AuRa)
 	if !ok {
 		panic("AuraPrepare called in a non-Aura context")
 	}
-	return ethone.AuraPrepare(chainConfig, header, statedb)
+	return ethone.AuraPrepare(evm, header)
 }

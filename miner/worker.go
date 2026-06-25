@@ -323,9 +323,13 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 				}
 			}
 
-			if err := b.AuraPrepare(miner.chainConfig, header, state); err != nil {
+			context := core.NewEVMBlockContext(header, miner.chain, nil)
+			evm := vm.NewEVM(context, state, miner.chainConfig, *miner.chain.GetVMConfig())
+			if err := b.AuraPrepare(evm, header); err != nil {
+				evm.Release()
 				return nil, fmt.Errorf("error running AuRa pre-STF boilerplate")
 			}
+			evm.Release()
 		}
 	}
 	// Run the consensus preparation with the default or customized consensus engine.

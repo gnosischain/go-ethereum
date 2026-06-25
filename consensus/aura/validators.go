@@ -21,26 +21,6 @@ import (
 	"github.com/holiman/uint256"
 )
 
-// nolint
-type CallResults struct {
-	data      []byte
-	proof     [][]byte
-	execError string
-}
-
-// Type alias for a function we can make calls through synchronously.
-// Returns the call result and state proof for each call.
-type Call func(common.Address, []byte) (CallResults, error)
-
-// A system-calling closure. Enacts calls on a block's state from the system address.
-type SystemCall func(common.Address, []byte) (CallResults, error)
-
-type client interface {
-	CallAtBlockHash(common.Hash, common.Address, []byte) (CallResults, error)
-	CallAtLatestBlock(common.Address, []byte) (CallResults, error)
-	SystemCallAtBlockHash(blockHash common.Hash, contract common.Address, data []byte) (CallResults, error)
-}
-
 type ValidatorSet interface {
 	// Signalling that a new epoch has begun.
 	//
@@ -48,8 +28,7 @@ type ValidatorSet interface {
 	// and will have an effect on the block's state.
 	// The caller provided here may not generate proofs.
 	//
-	// `first` is true if this is the first block in the set.
-	onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error
+	onEpochBegin(header *types.Header, evm *vm.EVM) error
 
 	// Draws a validator nonce modulo number of validators.
 	// getWithCaller(parentHash common.Hash, nonce uint, caller consensus.Call) (common.Address, error)
@@ -213,9 +192,9 @@ func (s *Multi) genesisEpochData(header *types.Header) ([]byte, error) {
 	return set.genesisEpochData(header)
 }
 
-func (s *Multi) onEpochBegin(_ bool, header *types.Header, caller Syscall) error {
-	setTransition, set := s.correctSetByNumber(header.Number.Uint64())
-	return set.onEpochBegin(setTransition == header.Number.Uint64(), header, caller)
+func (s *Multi) onEpochBegin(header *types.Header, evm *vm.EVM) error {
+	_, set := s.correctSetByNumber(header.Number.Uint64())
+	return set.onEpochBegin(header, evm)
 }
 func (s *Multi) signalEpochEnd(_ bool, header *types.Header, r types.Receipts) ([]byte, error) {
 	num := header.Number.Uint64()
@@ -231,7 +210,7 @@ type SimpleList struct {
 func (s *SimpleList) epochSet(bool, uint64, []byte, *vm.EVM) (SimpleList, common.Hash, error) {
 	return *s, common.Hash{}, nil
 }
-func (s *SimpleList) onEpochBegin(bool, *types.Header, Syscall) error {
+func (s *SimpleList) onEpochBegin(*types.Header, *vm.EVM) error {
 	return nil
 }
 
@@ -260,11 +239,10 @@ type ValidatorSafeContract struct {
 	// with POSDAO modifications.
 	posdaoTransition *uint64
 
-	abi    abi.ABI
-	client client
+	abi abi.ABI
 }
 
-func NewValidatorSafeContract(contractAddress common.Address, posdaoTransition *uint64, client client) *ValidatorSafeContract {
+func NewValidatorSafeContract(contractAddress common.Address, posdaoTransition *uint64) *ValidatorSafeContract {
 	const MemoizeCapacity = 500
 	c, err := lru.New[common.Hash, *SimpleList](MemoizeCapacity)
 	if err != nil {
@@ -379,9 +357,9 @@ func (s *ValidatorSafeContract) genesisEpochData(header *types.Header) ([]byte, 
 	return rlp.EncodeToBytes(FirstValidatorSetProof{Header: header, ContractAddress: s.contractAddress})
 }
 
-func (s *ValidatorSafeContract) onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error {
+func (s *ValidatorSafeContract) onEpochBegin(header *types.Header, evm *vm.EVM) error {
 	data := common.FromHex("75286211") // s.abi.Pack("finalizeChange")
-	_, err := caller(s.contractAddress, data)
+	_, err := systemCall(evm, s.contractAddress, data)
 	if err != nil {
 		return err
 	}
@@ -543,8 +521,8 @@ func (s *ValidatorContract) epochSet(firstInEpoch bool, num uint64, proof []byte
 	return s.validators.epochSet(firstInEpoch, num, proof, evm)
 }
 
-func (s *ValidatorContract) onEpochBegin(firstInEpoch bool, header *types.Header, caller Syscall) error {
-	return s.validators.onEpochBegin(firstInEpoch, header, caller)
+func (s *ValidatorContract) onEpochBegin(header *types.Header, evm *vm.EVM) error {
+	return s.validators.onEpochBegin(header, evm)
 }
 func (s *ValidatorContract) genesisEpochData(header *types.Header) ([]byte, error) {
 	return s.validators.genesisEpochData(header)
