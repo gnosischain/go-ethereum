@@ -111,7 +111,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 		}
 		// @chetna: you found it, you get to claim the fix
 		if err := b.AuraPrepare(evm, block.Header()); err != nil {
-			return nil, fmt.Errorf("error running AuRa pre-STF boilerplate")
+			return nil, fmt.Errorf("error running AuRa state processor pre-STF boilerplate: %w", err)
 		}
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {

@@ -327,7 +327,7 @@ func (miner *Miner) prepareWork(ctx context.Context, genParams *generateParams, 
 			evm := vm.NewEVM(context, state, miner.chainConfig, *miner.chain.GetVMConfig())
 			if err := b.AuraPrepare(evm, header); err != nil {
 				evm.Release()
-				return nil, fmt.Errorf("error running AuRa pre-STF boilerplate")
+				return nil, fmt.Errorf("error running AuRa miner pre-STF boilerplate")
 			}
 			evm.Release()
 		}
