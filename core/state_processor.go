@@ -108,9 +108,8 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 					statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
 				}
 			}
+			b.AuraPrepare(evm, block.Header())
 		}
-		// @chetna: you found it, you get to claim the fix
-		b.AuraPrepare(evm, block.Header())
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
