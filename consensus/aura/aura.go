@@ -173,7 +173,7 @@ func (e *EpochManager) noteNewEpoch() { e.force = true }
 // zoomValidators - Zooms to the epoch after the header with the given hash. Returns true if succeeded, false otherwise.
 // It's analog of zoom_to_after function in OE, but doesn't require external locking
 // nolint
-func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, evm *vm.EVM) (*RollingFinality, uint64, bool) {
+func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, evm *vm.EVM) bool {
 	var lastWasParent bool
 	if e.finalityChecker.lastPushed != nil {
 		lastWasParent = *e.finalityChecker.lastPushed == hash
@@ -182,7 +182,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 	// early exit for current target == chain head, but only if the epochs are
 	// the same.
 	if lastWasParent && !e.force {
-		return e.finalityChecker, e.epochTransitionNumber, true
+		return true
 	}
 	e.force = false
 
@@ -195,7 +195,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		if lastTransition.BlockNumber > DEBUG_LOG_FROM {
 			fmt.Printf("zoom1: %d\n", lastTransition.BlockNumber)
 		}
-		return e.finalityChecker, e.epochTransitionNumber, false
+		return false
 	}
 
 	// extract other epoch set if it's not the same as the last.
@@ -227,7 +227,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 
 	e.epochTransitionHash = lastTransition.BlockHash
 	e.epochTransitionNumber = lastTransition.BlockNumber
-	return e.finalityChecker, e.epochTransitionNumber, true
+	return true
 }
 
 // / Get the transition to the epoch the given parent hash is part of
@@ -536,7 +536,7 @@ func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header) error {
 }
 
 func (c *AuRa) ApplyRewards(header *types.Header, state vm.StateDB, evm *vm.EVM) error {
-	rewards, err := c.CalculateRewards(nil, header, nil, evm)
+	rewards, err := c.CalculateRewards(header, evm)
 	if err != nil {
 		return err
 	}
@@ -587,7 +587,7 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 
 func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, header *types.Header, evm *vm.EVM) []unAssembledHeader {
 	// commit_block -> aura.build_finality
-	_, _, ok := e.zoomToAfter(chain, er, validators, header.ParentHash, evm)
+	ok := e.zoomToAfter(chain, er, validators, header.ParentHash, evm)
 	if !ok {
 		return []unAssembledHeader{}
 	}
@@ -804,7 +804,7 @@ func (c *AuRa) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 	return []rpc.API{}
 }
 
-func (c *AuRa) CalculateRewards(_ *params.ChainConfig, header *types.Header, _ []*types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
+func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
 	var rewardContractAddress BlockRewardContract
 	var foundContract bool
 	for _, c := range c.cfg.BlockRewardContractTransitions {
