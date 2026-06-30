@@ -93,23 +93,8 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	evm := vm.NewEVM(context, tracingStateDB, config, cfg)
 	defer evm.Release()
 	b, ok := p.chain.Engine().(*beacon.Beacon)
-	if ok {
-		// Balancer hack hardfork: rewrite the bytecode at the fork transition
-		if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
-			parent := p.chain.GetHeaderByHash(block.ParentHash())
-			if parent == nil {
-				panic("couldn't find parent when trying to apply code rewrite")
-			}
-			// rewrite the code at the transition boundary
-			if !config.IsBalancer(parent.Number, parent.Time) {
-				statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-				// Extra address, used for testing
-				if config.Aura.BalancerTestRewriteAddress != nil {
-					statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-				}
-			}
-			b.AuraPrepare(evm, block.Header())
-		}
+	if ok && config.Aura != nil {
+		b.AuraPrepare(evm, block.Header(), p.chain)
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)

@@ -444,10 +444,10 @@ func (beacon *Beacon) SetThreads(threads int) {
 	}
 }
 
-func (beacon *Beacon) AuraPrepare(evm *vm.EVM, header *types.Header) error {
+func (beacon *Beacon) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.ChainHeaderReader) error {
 	ethone, ok := beacon.ethone.(*aura.AuRa)
 	if !ok {
 		panic("AuraPrepare called in a non-Aura context")
 	}
-	return ethone.AuraPrepare(evm, header)
+	return ethone.AuraPrepare(evm, header, chain)
 }

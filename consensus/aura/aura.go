@@ -498,7 +498,23 @@ func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, 
 	return nil
 }
 
-func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header) error {
+func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.ChainHeaderReader) error {
+	// Rewrite balancer hack reversion hardfork
+	if evm.ChainConfig().Aura.BalancerRewriteAddress != nil && evm.ChainConfig().IsBalancer(header.Number, header.Time) {
+		parent := chain.GetHeaderByHash(header.ParentHash)
+		if parent == nil {
+			panic("couldn't find parent when trying to apply code rewrite")
+		}
+		// rewrite the code at the transition boundary
+		if !evm.ChainConfig().IsBalancer(parent.Number, parent.Time) {
+			evm.StateDB.SetCode(*evm.ChainConfig().Aura.BalancerRewriteAddress, evm.ChainConfig().Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			// Extra address, used for testing
+			if evm.ChainConfig().Aura.BalancerTestRewriteAddress != nil {
+				evm.StateDB.SetCode(*evm.ChainConfig().Aura.BalancerTestRewriteAddress, evm.ChainConfig().Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			}
+		}
+	}
+
 	blockNum := header.Number.Uint64()
 	for address, rewrittenCode := range c.cfg.RewriteBytecode[blockNum] {
 		evm.StateDB.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
