@@ -342,6 +342,36 @@ func (b *BlockGen) collectRequests(readonly bool) (requests [][]byte) {
 	return requests
 }
 
+type dummyChainHeaderReader struct {
+	Parent *types.Header
+}
+
+func (drc *dummyChainHeaderReader) Config() *params.ChainConfig { return nil }
+
+// CurrentHeader retrieves the current header from the local chain.
+func (drc *dummyChainHeaderReader) CurrentHeader() *types.Header { return nil }
+
+// GetHeader retrieves a block header from the database by hash and number.
+func (drc *dummyChainHeaderReader) GetHeader(hash common.Hash, number uint64) *types.Header {
+	return nil
+}
+
+// GetHeaderByNumber retrieves a block header from the database by number.
+func (drc *dummyChainHeaderReader) GetHeaderByNumber(number uint64) *types.Header {
+	if drc.Parent.Number.Uint64() == number {
+		return drc.Parent
+	}
+	return nil
+}
+
+// GetHeaderByHash retrieves a block header from the database by its hash.
+func (drc *dummyChainHeaderReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	if drc.Parent.Hash() == hash {
+		return drc.Parent
+	}
+	return nil
+}
+
 // GenerateChain creates a chain of n blocks. The first block's
 // parent will be the provided parent. db is used to store
 // intermediate states and should contain the parent's state trie.
@@ -398,7 +428,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
 		if bcn, ok := b.engine.(*beacon.Beacon); ok {
 			if _, ok := bcn.InnerEngine().(*aura.AuRa); ok {
-				bcn.AuraPrepare(evm, b.header)
+				bcn.AuraPrepare(evm, b.header, &dummyChainHeaderReader{Parent: parent.Header()})
 			}
 		}
 		if config.IsPrague(b.header.Number, b.header.Time) || config.IsUBT(b.header.Number, b.header.Time) {
