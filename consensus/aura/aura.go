@@ -154,35 +154,6 @@ type PermissionedStep struct {
 type ReceivedStepHashes map[uint64]map[common.Address]common.Hash //BTreeMap<(u64, Address), H256>
 
 // nolint
-func (r ReceivedStepHashes) get(step uint64, author common.Address) (common.Hash, bool) {
-	res, ok := r[step]
-	if !ok {
-		return common.Hash{}, false
-	}
-	result, ok := res[author]
-	return result, ok
-}
-
-// nolint
-func (r ReceivedStepHashes) insert(step uint64, author common.Address, blockHash common.Hash) {
-	res, ok := r[step]
-	if !ok {
-		res = map[common.Address]common.Hash{}
-		r[step] = res
-	}
-	res[author] = blockHash
-}
-
-// nolint
-func (r ReceivedStepHashes) dropAncient(step uint64) {
-	for i := range r {
-		if i < step {
-			delete(r, i)
-		}
-	}
-}
-
-// nolint
 type EpochManager struct {
 	epochTransitionHash   common.Hash // H256,
 	epochTransitionNumber uint64      // BlockNumber
@@ -202,7 +173,7 @@ func (e *EpochManager) noteNewEpoch() { e.force = true }
 // zoomValidators - Zooms to the epoch after the header with the given hash. Returns true if succeeded, false otherwise.
 // It's analog of zoom_to_after function in OE, but doesn't require external locking
 // nolint
-func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, call Syscall) (*RollingFinality, uint64, bool) {
+func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, hash common.Hash, evm *vm.EVM) bool {
 	var lastWasParent bool
 	if e.finalityChecker.lastPushed != nil {
 		lastWasParent = *e.finalityChecker.lastPushed == hash
@@ -211,7 +182,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 	// early exit for current target == chain head, but only if the epochs are
 	// the same.
 	if lastWasParent && !e.force {
-		return e.finalityChecker, e.epochTransitionNumber, true
+		return true
 	}
 	e.force = false
 
@@ -224,7 +195,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		if lastTransition.BlockNumber > DEBUG_LOG_FROM {
 			fmt.Printf("zoom1: %d\n", lastTransition.BlockNumber)
 		}
-		return e.finalityChecker, e.epochTransitionNumber, false
+		return false
 	}
 
 	// extract other epoch set if it's not the same as the last.
@@ -239,7 +210,7 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		}
 
 		// use signal number so multi-set first calculation is correct.
-		list, _, err := validators.epochSet(first, proof.SignalNumber, proof.SetProof, call)
+		list, _, err := validators.epochSet(first, proof.SignalNumber, proof.SetProof, evm)
 		if err != nil {
 			panic(fmt.Errorf("proof produced by this engine is invalid: %w", err))
 		}
@@ -248,15 +219,15 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		e.finalityChecker = NewRollingFinality(epochSet)
 		if proof.SignalNumber >= DEBUG_LOG_FROM {
 			fmt.Printf("new rolling finality: %d\n", proof.SignalNumber)
-			for i := 0; i < len(epochSet); i++ {
-				fmt.Printf("\t%x\n", epochSet[i])
+			for _, e := range epochSet {
+				fmt.Printf("\t%x\n", e)
 			}
 		}
 	}
 
 	e.epochTransitionHash = lastTransition.BlockHash
 	e.epochTransitionNumber = lastTransition.BlockNumber
-	return e.finalityChecker, e.epochTransitionNumber, true
+	return true
 }
 
 // / Get the transition to the epoch the given parent hash is part of
@@ -281,7 +252,18 @@ func epochTransitionFor(chain consensus.ChainHeaderReader, e *NonTransactionalEp
 	return EpochTransition{BlockNumber: num, BlockHash: hash, ProofRlp: transitionProof}, true
 }
 
-type Syscall func(common.Address, []byte) ([]byte, error)
+func systemCall(evm *vm.EVM, contractAddr common.Address, data []byte) ([]byte, error) {
+	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, evm.Context.Random != nil, evm.Context.Time)
+	if !rules.IsAmsterdam {
+		evm.Context.Transfer(evm.StateDB, params.SystemAddress, contractAddr, new(uint256.Int), &rules)
+	}
+	ret, _, err := evm.Call(params.SystemAddress, contractAddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
+	if err != nil {
+		panic(err)
+	}
+	evm.StateDB.Finalise(true)
+	return ret, err
+}
 
 // AuRa
 // nolint
@@ -300,10 +282,6 @@ type AuRa struct {
 
 	certifier     *common.Address // certifies service transactions
 	certifierLock sync.RWMutex
-
-	Syscall Syscall
-
-	isPos bool
 }
 
 func SortedKeys[K constraints.Ordered, V any](m map[K]V) []K {
@@ -517,17 +495,34 @@ func (c *AuRa) VerifyUncles(chain consensus.ChainReader, header *types.Block) er
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) error {
-	c.verifyGasLimitOverride(chain.Config(), chain, header, statedb)
+	return nil
+}
 
-	// func (c *AuRa) Initialize(config *params.ChainConfig, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []types.Transaction, uncles []*types.Header, syscall consensus.SystemCall) {
+func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.ChainHeaderReader) error {
+	// Rewrite balancer hack reversion hardfork
+	if evm.ChainConfig().Aura.BalancerRewriteAddress != nil && evm.ChainConfig().IsBalancer(header.Number, header.Time) {
+		parent := chain.GetHeaderByHash(header.ParentHash)
+		if parent == nil {
+			panic("couldn't find parent when trying to apply code rewrite")
+		}
+		// rewrite the code at the transition boundary
+		if !evm.ChainConfig().IsBalancer(parent.Number, parent.Time) {
+			evm.StateDB.SetCode(*evm.ChainConfig().Aura.BalancerRewriteAddress, evm.ChainConfig().Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			// Extra address, used for testing
+			if evm.ChainConfig().Aura.BalancerTestRewriteAddress != nil {
+				evm.StateDB.SetCode(*evm.ChainConfig().Aura.BalancerTestRewriteAddress, evm.ChainConfig().Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
+			}
+		}
+	}
+
 	blockNum := header.Number.Uint64()
 	for address, rewrittenCode := range c.cfg.RewriteBytecode[blockNum] {
-		statedb.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
+		evm.StateDB.SetCode(address, rewrittenCode, tracing.CodeChangeContractCreation)
 	}
 
 	c.certifierLock.Lock()
-	if c.cfg.Registrar != nil && c.certifier == nil && chain.Config().IsLondon(header.Number) {
-		c.certifier = getCertifier(*c.cfg.Registrar, c.Syscall)
+	if c.cfg.Registrar != nil && c.certifier == nil && evm.ChainConfig().IsLondon(header.Number) {
+		c.certifier = getCertifier(*c.cfg.Registrar, evm)
 	}
 	c.certifierLock.Unlock()
 
@@ -552,12 +547,12 @@ func (c *AuRa) Prepare(chain consensus.ChainHeaderReader, header *types.Header, 
 	if !isEpochBegin {
 		return nil
 	}
-	return c.cfg.Validators.onEpochBegin(isEpochBegin, header, c.Syscall)
+	return c.cfg.Validators.onEpochBegin(header, evm)
 	// check_and_lock_block -> check_epoch_end_signal END (before enact)
 }
 
 func (c *AuRa) ApplyRewards(header *types.Header, state vm.StateDB, evm *vm.EVM) error {
-	rewards, err := c.CalculateRewards(nil, header, nil, evm)
+	rewards, err := c.CalculateRewards(header, evm)
 	if err != nil {
 		return err
 	}
@@ -591,7 +586,7 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	}
 	// check_and_lock_block -> check_epoch_end_signal END
 
-	finalized := buildFinality(c.EpochManager, chain, c.e, c.cfg.Validators, header, c.Syscall)
+	finalized := buildFinality(c.EpochManager, chain, c.e, c.cfg.Validators, header, evm)
 	c.EpochManager.finalityChecker.print(header.Number.Uint64())
 	epochEndProof, err := isEpochEnd(chain, c.e, finalized, header)
 	if err != nil {
@@ -606,9 +601,9 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	}
 }
 
-func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, header *types.Header, syscall Syscall) []unAssembledHeader {
+func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTransactionalEpochReader, validators ValidatorSet, header *types.Header, evm *vm.EVM) []unAssembledHeader {
 	// commit_block -> aura.build_finality
-	_, _, ok := e.zoomToAfter(chain, er, validators, header.ParentHash, syscall)
+	ok := e.zoomToAfter(chain, er, validators, header.ParentHash, evm)
 	if !ok {
 		return []unAssembledHeader{}
 	}
@@ -734,7 +729,7 @@ func (c *AuRa) Authorize(signer common.Address) {
 }
 
 func (c *AuRa) GenesisEpochData(header *types.Header) ([]byte, error) {
-	setProof, err := c.cfg.Validators.genesisEpochData(header, c.Syscall)
+	setProof, err := c.cfg.Validators.genesisEpochData(header)
 	if err != nil {
 		return nil, err
 	}
@@ -822,39 +817,10 @@ func (c *AuRa) Close() error {
 // APIs implements consensus.Engine, returning the user facing RPC API to allow
 // controlling the signer voting.
 func (c *AuRa) APIs(chain consensus.ChainHeaderReader) []rpc.API {
-	return []rpc.API{
-		//{
-		//Namespace: "clique",
-		//Version:   "1.0",
-		//Service:   &API{chain: chain, clique: c},
-		//Public:    false,
-		//}
-	}
+	return []rpc.API{}
 }
 
-// nolint
-func (c *AuRa) emptySteps(fromStep, toStep uint64, parentHash common.Hash) []EmptyStep {
-	from := EmptyStep{step: fromStep + 1, parentHash: parentHash}
-	to := EmptyStep{step: toStep}
-	res := []EmptyStep{}
-	if to.LessOrEqual(&from) {
-		return res
-	}
-
-	c.EmptyStepsSet.Sort()
-	c.EmptyStepsSet.ForEach(func(i int, step *EmptyStep) {
-		if step.Less(&from) || (&to).Less(step) {
-			return
-		}
-		if step.parentHash != parentHash {
-			return
-		}
-		res = append(res, *step)
-	})
-	return res
-}
-
-func (c *AuRa) CalculateRewards(_ *params.ChainConfig, header *types.Header, _ []*types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
+func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
 	var rewardContractAddress BlockRewardContract
 	var foundContract bool
 	for _, c := range c.cfg.BlockRewardContractTransitions {
@@ -917,10 +883,6 @@ func (c *AuRa) ExecuteSystemWithdrawals(evm *vm.EVM, withdrawals []*types.Withdr
 
 	_, _, err = evm.Call(params.SystemAddress, *c.cfg.WithdrawalContractAddress, packed, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
 	return err
-}
-
-func (c *AuRa) SetMerged(merged bool) {
-	c.isPos = merged
 }
 
 // An empty step message that is included in a seal, the only difference is that it doesn't include
@@ -1123,12 +1085,7 @@ func (f *RollingFinality) isFinalized() bool {
 	return len(f.signCount)*2 > len(f.signers.validators)
 }
 func (f *RollingFinality) hasSigner(signer common.Address) bool {
-	for j := range f.signers.validators {
-		if f.signers.validators[j] == signer {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.signers.validators, signer)
 }
 func (f *RollingFinality) addSigners(signers []common.Address) bool {
 	for i := range signers {
@@ -1204,7 +1161,7 @@ func sealHash(header *types.Header) (hash common.Hash) {
 }
 
 func encodeSigHeader(w io.Writer, header *types.Header) {
-	enc := []interface{}{
+	enc := []any{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,

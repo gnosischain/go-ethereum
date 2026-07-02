@@ -48,38 +48,6 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	return beneficiariesRes, rewardsBig
 }
 
-func callBlockGasLimitAbi(contractAddr common.Address, syscall Syscall) *uint256.Int {
-	packed, err := blockGasLimitAbi().Pack("blockGasLimit")
-	if err != nil {
-		panic(err)
-	}
-	out, err := syscall(contractAddr, packed)
-	if err != nil {
-		panic(err)
-	}
-	if len(out) == 0 {
-		return uint256.NewInt(0)
-	}
-	res, err := blockGasLimitAbi().Unpack("blockGasLimit", out)
-	if err != nil {
-		panic(err)
-	}
-
-	val, overflow := uint256.FromBig(res[0].(*big.Int))
-	if overflow {
-		panic("Overflow casting bigInt value to uint256")
-	}
-	return val
-}
-
-func blockGasLimitAbi() abi.ABI {
-	a, err := abi.JSON(bytes.NewReader(contracts.BlockGasLimit))
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
 func blockRewardAbi() abi.ABI {
 	a, err := abi.JSON(bytes.NewReader(contracts.BlockReward))
 	if err != nil {
@@ -112,13 +80,13 @@ func withdrawalAbi() abi.ABI {
 	return a
 }
 
-func getCertifier(registrar common.Address, syscall Syscall) *common.Address {
+func getCertifier(registrar common.Address, evm *vm.EVM) *common.Address {
 	hashedKey := crypto.Keccak256Hash([]byte("service_transaction_checker"))
 	packed, err := registrarAbi().Pack("getAddress", hashedKey, "A")
 	if err != nil {
 		panic(err)
 	}
-	out, err := syscall(registrar, packed)
+	out, err := systemCall(evm, registrar, packed)
 	if err != nil {
 		panic(err)
 	}

@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -93,27 +92,9 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	context = NewEVMBlockContext(header, p.chain, nil)
 	evm := vm.NewEVM(context, tracingStateDB, config, cfg)
 	defer evm.Release()
-	if b, ok := p.chain.Engine().(*beacon.Beacon); ok {
-		if _, ok := b.InnerEngine().(*aura.AuRa); ok {
-			b.SetAuraSyscall(MakeAuraSyscall(tracingStateDB, context, config, cfg))
-
-			// Balancer hack hardfork: rewrite the bytecode at the fork transition
-			if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(block.Number(), block.Time()) {
-				parent := p.chain.GetHeaderByHash(block.ParentHash())
-				if parent == nil {
-					panic("couldn't find parent when trying to apply code rewrite")
-				}
-				// rewrite the code at the transition boundary
-				if !config.IsBalancer(parent.Number, parent.Time) {
-					statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-					// Extra address, used for testing
-					if config.Aura.BalancerTestRewriteAddress != nil {
-						statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-					}
-				}
-			}
-			b.AuraPrepare(p.chain, block.Header(), statedb)
-		}
+	b, ok := p.chain.Engine().(*beacon.Beacon)
+	if ok && config.Aura != nil {
+		b.AuraPrepare(evm, block.Header(), p.chain)
 	}
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, evm)
@@ -425,22 +406,4 @@ func AssembleBlock(engine consensus.Engine, chain consensus.ChainHeaderReader, h
 	engine.Finalize(chain, header, state, body, receipts, evm)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	return types.NewBlock(header, body, receipts, trie.NewStackTrie(nil))
-}
-
-func MakeAuraSyscall(statedb vm.StateDB, context vm.BlockContext, chainConfig *params.ChainConfig, vmConfig vm.Config) aura.Syscall {
-	return func(contractaddr common.Address, data []byte) ([]byte, error) {
-		evm := vm.NewEVM(context, statedb, chainConfig, vmConfig)
-		// On Pre-Amsterdam blocks, explicitly call transfer even for zero-value to match pre-merge
-		// AuRa syscall behavior
-		rules := chainConfig.Rules(context.BlockNumber, context.Random != nil, context.Time)
-		if !rules.IsAmsterdam {
-			context.Transfer(statedb, params.SystemAddress, contractaddr, new(uint256.Int), &rules)
-		}
-		ret, _, err := evm.Call(params.SystemAddress, contractaddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
-		if err != nil {
-			panic(err)
-		}
-		statedb.Finalise(true)
-		return ret, err
-	}
 }

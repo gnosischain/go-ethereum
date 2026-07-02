@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -397,23 +396,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		blockContext := NewEVMBlockContext(b.header, cm, &b.header.Coinbase)
 		blockContext.Random = &common.Hash{} // enable post-merge instruction set
 		evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
-		// Apply AuRa pre-execution system calls, mirroring StateProcessor.Process,
-		// so that generated blocks reach the same pre-state as imported blocks.
-		// Only run for beacon engines whose inner engine is AuRa; calling ethash or
-		// clique Prepare here would corrupt header.Difficulty / header.Time.
 		if bcn, ok := b.engine.(*beacon.Beacon); ok {
 			if _, ok := bcn.InnerEngine().(*aura.AuRa); ok {
-				bcn.SetAuraSyscall(MakeAuraSyscall(statedb, blockContext, cm.config, vm.Config{}))
-				// Balancer hack hardfork: rewrite bytecode at the fork transition
-				if config.Aura != nil && config.Aura.BalancerRewriteAddress != nil && config.IsBalancer(b.header.Number, b.header.Time) {
-					if !config.IsBalancer(parent.Number(), parent.Time()) {
-						statedb.SetCode(*config.Aura.BalancerRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-						if config.Aura.BalancerTestRewriteAddress != nil {
-							statedb.SetCode(*config.Aura.BalancerTestRewriteAddress, config.Aura.BalancerRewriteCode[:], tracing.CodeChangeUnspecified)
-						}
-					}
-				}
-				bcn.AuraPrepare(cm, b.header, statedb)
+				bcn.AuraPrepare(evm, b.header, cm)
 			}
 		}
 		if config.IsPrague(b.header.Number, b.header.Time) || config.IsUBT(b.header.Number, b.header.Time) {
