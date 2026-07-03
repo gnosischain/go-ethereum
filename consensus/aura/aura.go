@@ -426,6 +426,17 @@ func (c *AuRa) Author(header *types.Header) (common.Address, error) {
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
 func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header) error {
+	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	return c.verifyHeader(chain, header, parent)
+}
+
+// verifyHeader checks whether a header conforms to the consensus rules, using
+// the given parent header, which during batch verification may not be in the
+// database yet.
+func (c *AuRa) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header) error {
+	if parent == nil {
+		return consensus.ErrUnknownAncestor
+	}
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra)) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra), params.MaximumExtraDataSize)
@@ -444,14 +455,14 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
 	// Verify the block's gas usage and (if applicable) verify the base fee.
-	if !chain.Config().IsLondon(header.Number) && header.BaseFee != nil {
-		return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
-	}
-	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-	if parent != nil {
-		if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
-			return err
+	if !chain.Config().IsLondon(header.Number) {
+		// Verify BaseFee not present before EIP-1559 fork.
+		if header.BaseFee != nil {
+			return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
 		}
+	} else if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
+		// Verify the header's EIP-1559 attributes.
+		return err
 	}
 
 	// Verify that the block number is parent's +1
@@ -486,9 +497,17 @@ func (c *AuRa) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types
 	results := make(chan error, len(headers))
 
 	go func() {
-		for _, header := range headers {
-			err := c.VerifyHeader(chain, header)
-
+		for i, header := range headers {
+			// Look up the parent in the database only for the first header;
+			// the rest of the batch has not been written yet, so resolve
+			// parents from the batch itself.
+			var parent *types.Header
+			if i == 0 {
+				parent = chain.GetHeader(headers[0].ParentHash, headers[0].Number.Uint64()-1)
+			} else if headers[i-1].Hash() == headers[i].ParentHash {
+				parent = headers[i-1]
+			}
+			err := c.verifyHeader(chain, header, parent)
 			select {
 			case <-abort:
 				return
