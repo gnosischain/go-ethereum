@@ -23,6 +23,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
@@ -389,6 +391,11 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		blockContext := NewEVMBlockContext(b.header, cm, &b.header.Coinbase)
 		blockContext.Random = &common.Hash{} // enable post-merge instruction set
 		evm := vm.NewEVM(blockContext, statedb, cm.config, vm.Config{})
+		if bcn, ok := b.engine.(*beacon.Beacon); ok {
+			if _, ok := bcn.InnerEngine().(*aura.AuRa); ok {
+				bcn.AuraPrepare(evm, b.header, cm)
+			}
+		}
 		if config.IsPrague(b.header.Number, b.header.Time) || config.IsUBT(b.header.Number, b.header.Time) {
 			// EIP-2935
 			ProcessParentBlockHash(b.header.ParentHash, evm, b.bal)
