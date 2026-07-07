@@ -258,7 +258,7 @@ func systemCall(evm *vm.EVM, contractAddr common.Address, data []byte) ([]byte, 
 	if !rules.IsAmsterdam {
 		evm.Context.Transfer(evm.StateDB, params.SystemAddress, contractAddr, new(uint256.Int), &rules)
 	}
-	ret, _, err := evm.Call(params.SystemAddress, contractAddr, data, vm.NewGasBudget(math.MaxUint64), new(uint256.Int))
+	ret, _, err := evm.Call(params.SystemAddress, contractAddr, data, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
 	if err != nil {
 		panic(err)
 	}

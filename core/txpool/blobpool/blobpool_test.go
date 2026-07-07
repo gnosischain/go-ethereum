@@ -1332,7 +1332,7 @@ func TestLegacyTxConversion(t *testing.T) {
 	chain := &testBlockChain{
 		config:  params.MainnetChainConfig,
 		basefee: uint256.NewInt(params.InitialBaseFee),
-		blobfee: uint256.NewInt(params.BlobTxMinBlobGasprice),
+		blobfee: uint256.NewInt(params.DefaultBlobTxMinBlobGasprice),
 		statedb: statedb,
 	}
 	pool := New(Config{Datadir: storage}, chain, nil)
