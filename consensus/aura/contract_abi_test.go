@@ -98,6 +98,24 @@ func TestWithdrawalSyscallCreatesSystemAddress(t *testing.T) {
 	}
 }
 
+// When the configured reward contract has no code, the reward syscall must
+// be skipped entirely: no call and no SYSTEM_ADDRESS creation. This matches
+// the execution-specs reference, which returns before the system call (and
+// before creating SYSTEM_ADDRESS) if the contract's code hash is empty.
+func TestRewardSyscallSkipsMissingContract(t *testing.T) {
+	evm, statedb := newSyscallTestEVM(preLondonConfig(), nil)
+	rewardAddr := common.HexToAddress("0x2000000000000000000000000000000000000001")
+
+	beneficiaries, amounts := callBlockRewardAbi(rewardAddr, evm, []common.Address{{0x01}}, []consensus.RewardKind{consensus.RewardAuthor})
+
+	if beneficiaries != nil || amounts != nil {
+		t.Fatal("expected no rewards from codeless reward contract")
+	}
+	if statedb.Exist(params.SystemAddress) {
+		t.Fatal("reward syscall created SYSTEM_ADDRESS despite codeless reward contract")
+	}
+}
+
 // Post-Amsterdam, EIP-7928 removes the syscall value transfer, so the
 // SYSTEM_ADDRESS account must no longer be created.
 func TestRewardSyscallPostAmsterdam(t *testing.T) {

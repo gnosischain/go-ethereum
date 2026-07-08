@@ -21,6 +21,12 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	if err != nil {
 		panic(err)
 	}
+	// If the reward contract has no code, skip the system call entirely
+	// (including the SYSTEM_ADDRESS-creating transfer), matching the
+	// execution-specs reference behavior.
+	if evm.StateDB.GetCodeSize(contractAddr) == 0 {
+		return nil, nil
+	}
 	out, err := systemCall(evm, contractAddr, packed)
 	if err != nil {
 		panic(err)
