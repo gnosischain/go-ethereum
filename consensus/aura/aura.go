@@ -431,9 +431,6 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 	return c.verifyHeader(chain, header, parent)
 }
 
-// verifyHeader checks whether a header conforms to the consensus rules, using
-// the given parent header, which during batch verification may not be in the
-// database yet.
 // gasLimitContractActive reports whether a block gas limit contract is
 // configured at or before the given block number.
 func (c *AuRa) gasLimitContractActive(num uint64) bool {
@@ -445,6 +442,9 @@ func (c *AuRa) gasLimitContractActive(num uint64) bool {
 	return false
 }
 
+// verifyHeader checks whether a header conforms to the consensus rules, using
+// the given parent header, which during batch verification may not be in the
+// database yet.
 func (c *AuRa) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header) error {
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
