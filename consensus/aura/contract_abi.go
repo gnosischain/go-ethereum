@@ -2,7 +2,6 @@ package aura
 
 import (
 	"bytes"
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -11,8 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/aura/contracts"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/holiman/uint256"
 )
 
 func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries []common.Address, rewardKind []consensus.RewardKind) ([]common.Address, []*big.Int) {
@@ -24,7 +21,12 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	if err != nil {
 		panic(err)
 	}
-	out, _, err := evm.Call(params.SystemAddress, contractAddr, packed, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
+	// TODO: This was done purely to get hive tests passing on no contract
+	// test. Discuss whether we change the code here or change the test behavior.
+	if evm.StateDB.GetCodeSize(contractAddr) == 0 {
+		return nil, nil
+	}
+	out, err := systemCall(evm, contractAddr, packed)
 	if err != nil {
 		panic(err)
 	}

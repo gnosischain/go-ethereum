@@ -914,6 +914,10 @@ func (c *AuRa) ExecuteSystemWithdrawals(evm *vm.EVM, withdrawals []*types.Withdr
 		return err
 	}
 
+	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, evm.Context.Random != nil, evm.Context.Time)
+	if !rules.IsAmsterdam {
+		evm.Context.Transfer(evm.StateDB, params.SystemAddress, *c.cfg.WithdrawalContractAddress, new(uint256.Int), &rules)
+	}
 	_, _, err = evm.Call(params.SystemAddress, *c.cfg.WithdrawalContractAddress, packed, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
 	return err
 }
