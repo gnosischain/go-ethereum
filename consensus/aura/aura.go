@@ -434,6 +434,17 @@ func (c *AuRa) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Hea
 // verifyHeader checks whether a header conforms to the consensus rules, using
 // the given parent header, which during batch verification may not be in the
 // database yet.
+// gasLimitContractActive reports whether a block gas limit contract is
+// configured at or before the given block number.
+func (c *AuRa) gasLimitContractActive(num uint64) bool {
+	for transition := range c.cfg.BlockGasLimitContractTransitions {
+		if transition <= num {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *AuRa) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header) error {
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
@@ -460,6 +471,16 @@ func (c *AuRa) verifyHeader(chain consensus.ChainHeaderReader, header, parent *t
 		// Verify BaseFee not present before EIP-1559 fork.
 		if header.BaseFee != nil {
 			return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
+		}
+	} else if c.gasLimitContractActive(header.Number.Uint64()) {
+		// The gas limit is dictated by the block gas limit contract and may
+		// jump arbitrarily between blocks, so the parent-bound gas limit
+		// check does not apply. Still verify the header's base fee.
+		if header.BaseFee == nil {
+			return errors.New("header is missing baseFee")
+		}
+		if expected := eip1559.CalcBaseFee(chain.Config(), parent); header.BaseFee.Cmp(expected) != 0 {
+			return fmt.Errorf("invalid baseFee: have %s, want %s, parentBaseFee %s, parentGasUsed %d", header.BaseFee, expected, parent.BaseFee, parent.GasUsed)
 		}
 	} else if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
 		// Verify the header's EIP-1559 attributes.
