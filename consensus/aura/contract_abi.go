@@ -21,11 +21,6 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	if err != nil {
 		panic(err)
 	}
-	// TODO: This was done purely to get hive tests passing on no contract
-	// test. Discuss whether we change the code here or change the test behavior.
-	if evm.StateDB.GetCodeSize(contractAddr) == 0 {
-		return nil, nil
-	}
 	out, err := systemCall(evm, contractAddr, packed)
 	if err != nil {
 		panic(err)
