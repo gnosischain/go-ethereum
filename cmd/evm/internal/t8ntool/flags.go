@@ -150,6 +150,10 @@ var (
 		Usage: "ChainID to use",
 		Value: 1,
 	}
+	AuraFlag = &cli.BoolFlag{
+		Name:  "state.aura",
+		Usage: "Use Gnosis AuRa system contracts",
+	}
 	ForknameFlag = &cli.StringFlag{
 		Name: "state.fork",
 		Usage: fmt.Sprintf("Name of ruleset to use."+

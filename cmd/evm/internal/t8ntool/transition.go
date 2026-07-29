@@ -154,15 +154,11 @@ func Transition(ctx *cli.Context) error {
 	// Set the chain id
 	chainConfig.ChainID = big.NewInt(ctx.Int64(ChainIDFlag.Name))
 
-	// The chain id is the only hint t8n gets about which network it emulates.
-	// Gnosis and Chiado retain AuRa's block reward and withdrawal system calls
-	// after the merge, so carry their AuRa configuration over; state transitions
-	// otherwise diverge from the reference fixtures.
-	for _, auraChain := range []*params.ChainConfig{params.GnosisChainConfig, params.ChiadoChainConfig} {
-		if chainConfig.ChainID.Cmp(auraChain.ChainID) == 0 {
-			chainConfig.Aura = auraChain.Aura
-			break
-		}
+	if ctx.Bool(AuraFlag.Name) {
+		auraConfig := *params.ChiadoChainConfig.Aura
+		withdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
+		auraConfig.WithdrawalContractAddress = &withdrawalContract
+		chainConfig.Aura = &auraConfig
 	}
 
 	if txIt, err = loadTransactions(txStr, inputData, chainConfig); err != nil {
