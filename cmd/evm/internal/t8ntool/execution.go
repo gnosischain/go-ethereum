@@ -316,6 +316,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 	statedb.IntermediateRoot(chainConfig.IsEIP158(vmContext.BlockNumber))
 
+	// TODO(rjl493456442) call engine.Finalize() instead
 	// Add mining reward? (-1 means rewards are disabled)
 	if miningReward >= 0 && !isAuRa {
 		// Add mining reward. The mining reward may be `0`, which only makes a difference in the cases
