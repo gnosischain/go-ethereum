@@ -145,12 +145,25 @@ func Transition(ctx *cli.Context) error {
 	if cConf, extraEips, err := tests.GetChainConfig(ctx.String(ForknameFlag.Name)); err != nil {
 		return NewError(ErrorConfig, fmt.Errorf("failed constructing chain configuration: %v", err))
 	} else {
-		chainConfig = cConf
+		// Copy, the fork configurations are shared globals.
+		config := *cConf
+		chainConfig = &config
 		vmConfig.ExtraEips = extraEips
 	}
 
 	// Set the chain id
 	chainConfig.ChainID = big.NewInt(ctx.Int64(ChainIDFlag.Name))
+
+	// The chain id is the only hint t8n gets about which network it emulates.
+	// Gnosis and Chiado retain AuRa's block reward and withdrawal system calls
+	// after the merge, so carry their AuRa configuration over; state transitions
+	// otherwise diverge from the reference fixtures.
+	for _, auraChain := range []*params.ChainConfig{params.GnosisChainConfig, params.ChiadoChainConfig} {
+		if chainConfig.ChainID.Cmp(auraChain.ChainID) == 0 {
+			chainConfig.Aura = auraChain.Aura
+			break
+		}
+	}
 
 	if txIt, err = loadTransactions(txStr, inputData, chainConfig); err != nil {
 		return err
