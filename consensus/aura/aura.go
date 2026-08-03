@@ -605,8 +605,20 @@ func (c *AuRa) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.Ch
 	// check_and_lock_block -> check_epoch_end_signal END (before enact)
 }
 
+func ApplyRewards(chainConfig *params.ChainConfig, header *types.Header, state vm.StateDB, evm *vm.EVM) error {
+	config, err := FromJson(chainConfig.Aura)
+	if err != nil {
+		return err
+	}
+	return applyRewards(&config, header, state, evm)
+}
+
 func (c *AuRa) ApplyRewards(header *types.Header, state vm.StateDB, evm *vm.EVM) error {
-	rewards, err := c.CalculateRewards(header, evm)
+	return applyRewards(&c.cfg, header, state, evm)
+}
+
+func applyRewards(config *AuthorityRoundParams, header *types.Header, state vm.StateDB, evm *vm.EVM) error {
+	rewards, err := calculateRewards(config, header, evm)
 	if err != nil {
 		return err
 	}
@@ -875,9 +887,13 @@ func (c *AuRa) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 }
 
 func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
+	return calculateRewards(&c.cfg, header, evm)
+}
+
+func calculateRewards(config *AuthorityRoundParams, header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
 	var rewardContractAddress BlockRewardContract
 	var foundContract bool
-	for _, c := range c.cfg.BlockRewardContractTransitions {
+	for _, c := range config.BlockRewardContractTransitions {
 		if c.blockNum > header.Number.Uint64() {
 			break
 		}
@@ -901,12 +917,12 @@ func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.
 	// block_reward.iter.rev().find(|&(block, _)| *block <= number)
 	var reward BlockReward
 	var found bool
-	for i := range c.cfg.BlockReward {
-		if c.cfg.BlockReward[i].blockNum > header.Number.Uint64() {
+	for i := range config.BlockReward {
+		if config.BlockReward[i].blockNum > header.Number.Uint64() {
 			break
 		}
 		found = true
-		reward = c.cfg.BlockReward[i]
+		reward = config.BlockReward[i]
 	}
 	if !found {
 		return nil, errors.New("Current block's reward is not found; this indicates a chain config error")
@@ -917,8 +933,20 @@ func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.
 }
 
 // See https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
+func ExecuteSystemWithdrawals(chainConfig *params.ChainConfig, evm *vm.EVM, withdrawals []*types.Withdrawal) error {
+	config, err := FromJson(chainConfig.Aura)
+	if err != nil {
+		return err
+	}
+	return executeSystemWithdrawals(&config, evm, withdrawals)
+}
+
 func (c *AuRa) ExecuteSystemWithdrawals(evm *vm.EVM, withdrawals []*types.Withdrawal) error {
-	if c.cfg.WithdrawalContractAddress == nil {
+	return executeSystemWithdrawals(&c.cfg, evm, withdrawals)
+}
+
+func executeSystemWithdrawals(config *AuthorityRoundParams, evm *vm.EVM, withdrawals []*types.Withdrawal) error {
+	if config.WithdrawalContractAddress == nil {
 		return nil
 	}
 
@@ -937,9 +965,9 @@ func (c *AuRa) ExecuteSystemWithdrawals(evm *vm.EVM, withdrawals []*types.Withdr
 
 	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, evm.Context.Random != nil, evm.Context.Time)
 	if !rules.IsAmsterdam {
-		evm.Context.Transfer(evm.StateDB, params.SystemAddress, *c.cfg.WithdrawalContractAddress, new(uint256.Int), &rules)
+		evm.Context.Transfer(evm.StateDB, params.SystemAddress, *config.WithdrawalContractAddress, new(uint256.Int), &rules)
 	}
-	_, _, err = evm.Call(params.SystemAddress, *c.cfg.WithdrawalContractAddress, packed, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
+	_, _, err = evm.Call(params.SystemAddress, *config.WithdrawalContractAddress, packed, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
 	return err
 }
 

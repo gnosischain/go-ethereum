@@ -145,21 +145,12 @@ func Transition(ctx *cli.Context) error {
 	if cConf, extraEips, err := tests.GetChainConfig(ctx.String(ForknameFlag.Name)); err != nil {
 		return NewError(ErrorConfig, fmt.Errorf("failed constructing chain configuration: %v", err))
 	} else {
-		// Copy, the fork configurations are shared globals.
-		config := *cConf
-		chainConfig = &config
+		chainConfig = cConf
 		vmConfig.ExtraEips = extraEips
 	}
 
 	// Set the chain id
 	chainConfig.ChainID = big.NewInt(ctx.Int64(ChainIDFlag.Name))
-
-	if ctx.Bool(AuraFlag.Name) {
-		auraConfig := *params.ChiadoChainConfig.Aura
-		withdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
-		auraConfig.WithdrawalContractAddress = &withdrawalContract
-		chainConfig.Aura = &auraConfig
-	}
 
 	if txIt, err = loadTransactions(txStr, inputData, chainConfig); err != nil {
 		return err

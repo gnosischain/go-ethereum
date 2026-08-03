@@ -30,6 +30,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -46,6 +47,31 @@ var (
 	executionSpecTransactionTestDir = filepath.Join(".", "spec-tests", "fixtures", "transaction_tests")
 	benchmarksDir                   = filepath.Join(".", "evm-benchmarks", "benchmarks")
 )
+
+func TestGnosisForkConfigs(t *testing.T) {
+	wantWithdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
+	for _, fork := range []string{"Frontier", "Byzantium", "London", "Merge", "Shanghai", "Cancun", "Prague", "Osaka"} {
+		config, _, err := GetChainConfig(fork)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.Aura == nil {
+			t.Fatalf("fork %s has no AuRa configuration", fork)
+		}
+		if config.Aura.WithdrawalContractAddress == nil || *config.Aura.WithdrawalContractAddress != wantWithdrawalContract {
+			t.Fatalf("fork %s has unexpected withdrawal contract: %v", fork, config.Aura.WithdrawalContractAddress)
+		}
+	}
+	for _, fork := range []string{"BPO1", "BPO2", "BPO3", "BPO4", "Amsterdam", "Verkle", "Binary"} {
+		config, _, err := GetChainConfig(fork)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.Aura != nil {
+			t.Fatalf("unsupported Gnosis fork %s has an AuRa configuration", fork)
+		}
+	}
+}
 
 func readJSON(reader io.Reader, value interface{}) error {
 	data, err := io.ReadAll(reader)

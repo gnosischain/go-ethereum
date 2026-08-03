@@ -160,7 +160,6 @@ var (
 			t8ntool.InputTxsFlag,
 			t8ntool.ForknameFlag,
 			t8ntool.ChainIDFlag,
-			t8ntool.AuraFlag,
 			t8ntool.RewardFlag,
 			t8ntool.OpcodeCountFlag,
 		},
