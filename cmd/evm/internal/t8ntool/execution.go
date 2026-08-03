@@ -161,11 +161,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 		isEIP4762   = chainConfig.IsUBT(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 		isAmsterdam = chainConfig.IsAmsterdam(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
-
-		// Gnosis chains keep AuRa's reward and withdrawal system calls after the
-		// merge; applyAuRaFinalization runs them instead of the plain balance
-		// credits below.
-		isAuRa = chainConfig.Aura != nil
+		isAuRa      = chainConfig.Aura != nil
 	)
 	if pre.AllocPath != "" {
 		var err error
@@ -376,8 +372,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 	blockAccessList.Merge(bal)
 
-	// Run the AuRa system calls, mirroring what beacon.Finalize does for
-	// post-merge Gnosis blocks: rewards first, then withdrawals.
 	if isAuRa {
 		if err := pre.applyAuRaFinalization(chainConfig, statedb, evm); err != nil {
 			return nil, nil, nil, err
