@@ -97,9 +97,10 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
 	// Run the pre-execution system calls
 	blockAccessList.Merge(PreExecution(ctx, block.BeaconRoot(), block.ParentHash(), config, evm, block.Number(), block.Time()))
 
-	b, ok := p.chain.Engine().(*beacon.Beacon)
-	if ok && config.Aura != nil {
-		b.AuraPrepare(evm, block.Header(), p.chain)
+	if b, ok := p.chain.Engine().(*beacon.Beacon); ok {
+		if _, ok := b.InnerEngine().(*aura.AuRa); ok {
+			b.AuraPrepare(evm, block.Header(), p.chain)
+		}
 	}
 
 	// Iterate over and process the individual transactions
