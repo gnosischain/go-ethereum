@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/params/forks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -194,4 +195,21 @@ func TestBlobParamGetters(t *testing.T) {
 			t.Fatalf("GetMaxBlobsPerTransaction() = %d, want %d", got, GnosisBlobTxMaxBlobs)
 		}
 	})
+}
+
+func TestGnosisBlobScheduleInheritance(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *ChainConfig
+		fork   forks.Fork
+	}{
+		{"gnosis balancer", GnosisChainConfig, forks.Balancer},
+		{"gnosis osaka", GnosisChainConfig, forks.Osaka},
+		{"chiado osaka", ChiadoChainConfig, forks.Osaka},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.config.BlobScheduleConfig.Prague, test.config.BlobConfig(test.fork))
+		})
+	}
 }
