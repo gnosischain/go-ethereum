@@ -359,6 +359,10 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 				}
 			}
 		}
+	} else {
+		if err := pre.applyAuRaFinalization(chainConfig, statedb, evm); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	// Gather the execution-layer triggered requests.
@@ -371,12 +375,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		return nil, nil, nil, NewError(ErrorEVM, fmt.Errorf("failed to process post-execution: %v", err))
 	}
 	blockAccessList.Merge(bal)
-
-	if isAuRa {
-		if err := pre.applyAuRaFinalization(chainConfig, statedb, evm); err != nil {
-			return nil, nil, nil, err
-		}
-	}
 
 	// Commit block
 	root, err := statedb.Commit(vmContext.BlockNumber.Uint64(), chainConfig.IsEIP158(vmContext.BlockNumber), chainConfig.IsCancun(vmContext.BlockNumber, vmContext.Time))

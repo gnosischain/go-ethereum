@@ -886,10 +886,6 @@ func (c *AuRa) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 	return []rpc.API{}
 }
 
-func (c *AuRa) CalculateRewards(header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
-	return calculateRewards(&c.cfg, header, evm)
-}
-
 func calculateRewards(config *AuthorityRoundParams, header *types.Header, evm *vm.EVM) ([]consensus.Reward, error) {
 	var rewardContractAddress BlockRewardContract
 	var foundContract bool

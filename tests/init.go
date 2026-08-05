@@ -27,32 +27,21 @@ import (
 
 func u64(val uint64) *uint64 { return &val }
 
-var auraConfig = func() *params.AuRaConfig {
-	withdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
-	config := *params.ChiadoChainConfig.Aura
-	config.WithdrawalContractAddress = &withdrawalContract
-	return &config
-}()
-
 // Forks table defines supported forks and their chain config.
 var Forks = map[string]*params.ChainConfig{
 	"Frontier": {
-		Aura:    auraConfig,
 		ChainID: big.NewInt(1),
 	},
 	"Homestead": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 	},
 	"EIP150": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		EIP150Block:    big.NewInt(0),
 	},
 	"EIP158": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		EIP150Block:    big.NewInt(0),
@@ -60,7 +49,6 @@ var Forks = map[string]*params.ChainConfig{
 		EIP158Block:    big.NewInt(0),
 	},
 	"Byzantium": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		EIP150Block:    big.NewInt(0),
@@ -70,7 +58,6 @@ var Forks = map[string]*params.ChainConfig{
 		ByzantiumBlock: big.NewInt(0),
 	},
 	"Constantinople": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -82,7 +69,6 @@ var Forks = map[string]*params.ChainConfig{
 		PetersburgBlock:     big.NewInt(10000000),
 	},
 	"ConstantinopleFix": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -94,7 +80,6 @@ var Forks = map[string]*params.ChainConfig{
 		PetersburgBlock:     big.NewInt(0),
 	},
 	"Istanbul": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -107,7 +92,6 @@ var Forks = map[string]*params.ChainConfig{
 		IstanbulBlock:       big.NewInt(0),
 	},
 	"MuirGlacier": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -121,25 +105,21 @@ var Forks = map[string]*params.ChainConfig{
 		MuirGlacierBlock:    big.NewInt(0),
 	},
 	"FrontierToHomesteadAt5": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(5),
 	},
 	"HomesteadToEIP150At5": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		EIP150Block:    big.NewInt(5),
 	},
 	"HomesteadToDaoAt5": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		DAOForkBlock:   big.NewInt(5),
 		DAOForkSupport: true,
 	},
 	"EIP158ToByzantiumAt5": {
-		Aura:           auraConfig,
 		ChainID:        big.NewInt(1),
 		HomesteadBlock: big.NewInt(0),
 		EIP150Block:    big.NewInt(0),
@@ -148,7 +128,6 @@ var Forks = map[string]*params.ChainConfig{
 		ByzantiumBlock: big.NewInt(5),
 	},
 	"ByzantiumToConstantinopleAt5": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -158,7 +137,6 @@ var Forks = map[string]*params.ChainConfig{
 		ConstantinopleBlock: big.NewInt(5),
 	},
 	"ByzantiumToConstantinopleFixAt5": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -169,7 +147,6 @@ var Forks = map[string]*params.ChainConfig{
 		PetersburgBlock:     big.NewInt(5),
 	},
 	"ConstantinopleFixToIstanbulAt5": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -181,7 +158,6 @@ var Forks = map[string]*params.ChainConfig{
 		IstanbulBlock:       big.NewInt(5),
 	},
 	"Berlin": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -195,7 +171,6 @@ var Forks = map[string]*params.ChainConfig{
 		BerlinBlock:         big.NewInt(0),
 	},
 	"BerlinToLondonAt5": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -210,7 +185,6 @@ var Forks = map[string]*params.ChainConfig{
 		LondonBlock:         big.NewInt(5),
 	},
 	"London": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -225,7 +199,6 @@ var Forks = map[string]*params.ChainConfig{
 		LondonBlock:         big.NewInt(0),
 	},
 	"ArrowGlacier": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -241,7 +214,6 @@ var Forks = map[string]*params.ChainConfig{
 		ArrowGlacierBlock:   big.NewInt(0),
 	},
 	"ArrowGlacierToParisAtDiffC0000": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -260,7 +232,6 @@ var Forks = map[string]*params.ChainConfig{
 		TerminalTotalDifficulty: big.NewInt(0xC0000),
 	},
 	"GrayGlacier": {
-		Aura:                auraConfig,
 		ChainID:             big.NewInt(1),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
@@ -277,7 +248,6 @@ var Forks = map[string]*params.ChainConfig{
 		GrayGlacierBlock:    big.NewInt(0),
 	},
 	"Paris": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -295,7 +265,6 @@ var Forks = map[string]*params.ChainConfig{
 		TerminalTotalDifficulty: big.NewInt(0),
 	},
 	"Merge": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -313,7 +282,6 @@ var Forks = map[string]*params.ChainConfig{
 		TerminalTotalDifficulty: big.NewInt(0),
 	},
 	"Shanghai": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -332,7 +300,6 @@ var Forks = map[string]*params.ChainConfig{
 		ShanghaiTime:            u64(0),
 	},
 	"ParisToShanghaiAtTime15k": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -351,7 +318,6 @@ var Forks = map[string]*params.ChainConfig{
 		ShanghaiTime:            u64(15_000),
 	},
 	"Cancun": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -374,7 +340,6 @@ var Forks = map[string]*params.ChainConfig{
 		},
 	},
 	"ShanghaiToCancunAtTime15k": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -397,7 +362,6 @@ var Forks = map[string]*params.ChainConfig{
 		},
 	},
 	"Prague": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -423,7 +387,6 @@ var Forks = map[string]*params.ChainConfig{
 		},
 	},
 	"CancunToPragueAtTime15k": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -449,7 +412,6 @@ var Forks = map[string]*params.ChainConfig{
 		},
 	},
 	"Osaka": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -477,7 +439,6 @@ var Forks = map[string]*params.ChainConfig{
 		},
 	},
 	"PragueToOsakaAtTime15k": {
-		Aura:                    auraConfig,
 		ChainID:                 big.NewInt(1),
 		HomesteadBlock:          big.NewInt(0),
 		EIP150Block:             big.NewInt(0),
@@ -844,6 +805,20 @@ var Forks = map[string]*params.ChainConfig{
 			Osaka:  params.DefaultOsakaBlobConfig,
 		},
 	},
+}
+
+const gnosisForkPrefix = "Gnosis"
+
+func init() {
+	withdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
+	auraConfig := *params.ChiadoChainConfig.Aura
+	auraConfig.WithdrawalContractAddress = &withdrawalContract
+
+	for _, name := range AvailableForks() {
+		config := *Forks[name]
+		config.Aura = &auraConfig
+		Forks[gnosisForkPrefix+name] = &config
+	}
 }
 
 var bpo1BlobConfig = &params.BlobConfig{
