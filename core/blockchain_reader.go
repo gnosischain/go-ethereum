@@ -395,11 +395,11 @@ func (bc *BlockChain) HasBlockAndState(hash common.Hash, number uint64) bool {
 	return bc.HasState(block.Root())
 }
 
-// stateRecoverable checks if the specified state is recoverable.
+// StateRecoverable checks if the specified state is recoverable.
 // Note, this function assumes the state is not present, because
 // state is not treated as recoverable if it's available, thus
 // false will be returned in this case.
-func (bc *BlockChain) stateRecoverable(root common.Hash) bool {
+func (bc *BlockChain) StateRecoverable(root common.Hash) bool {
 	if bc.triedb.Scheme() == rawdb.HashScheme {
 		return false
 	}
@@ -522,6 +522,12 @@ func (bc *BlockChain) TrieDB() *triedb.Database {
 // CodeDB retrieves the low level contract code database used for data storage.
 func (bc *BlockChain) CodeDB() *state.CodeDB {
 	return bc.codedb
+}
+
+// JumpDestCache retrieves the shared JUMPDEST analysis cache, so callers such
+// as the miner can reuse bitmaps already computed during block import.
+func (bc *BlockChain) JumpDestCache() vm.JumpDestCache {
+	return bc.jumpDestCache
 }
 
 // HeaderChain returns the underlying header chain.

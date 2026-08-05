@@ -151,7 +151,7 @@ func (eth *Ethereum) hashState(ctx context.Context, block *types.Block, base *st
 		if current = eth.blockchain.GetBlockByNumber(next); current == nil {
 			return nil, nil, fmt.Errorf("block #%d not found", next)
 		}
-		_, err := eth.blockchain.Processor().Process(ctx, current, statedb, nil, vm.Config{})
+		_, err := eth.blockchain.Processor().Process(ctx, current, statedb, nil, vm.Config{}, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("processing block %d failed: %v", current.NumberU64(), err)
 		}
@@ -250,7 +250,7 @@ func (eth *Ethereum) stateAtTransaction(ctx context.Context, block *types.Block,
 	defer evm.Release()
 
 	// Run pre-execution system calls
-	core.PreExecution(ctx, block.BeaconRoot(), block.ParentHash(), eth.blockchain.Config(), evm, block.Number(), block.Time())
+	core.PreExecution(ctx, block.BeaconRoot(), parent.Header(), eth.blockchain.Config(), evm, block.Number(), block.Time())
 
 	if txIndex == 0 && len(block.Transactions()) == 0 {
 		return nil, context, statedb, release, nil

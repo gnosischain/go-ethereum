@@ -156,7 +156,7 @@ func TestValidateBlobTxGnosisParams(t *testing.T) {
 			name:       "gnosis: 3 blobs rejected",
 			blobCount:  3,
 			blobFeeCap: 1000000000,
-			wantErr:    "too many blobs in transaction: have 3, permitted 2",
+			wantErr:    "transaction blob limit exceeded: blob count 3, limit 2",
 		},
 		{
 			name:       "gnosis: fee cap below minimum rejected",
@@ -173,7 +173,7 @@ func TestValidateBlobTxGnosisParams(t *testing.T) {
 				Config:       gnosisConfig,
 				Accept:       1 << types.BlobTxType,
 				MaxSize:      1024 * 1024,
-				MaxBlobCount: 6, // pool-level limit; chain-level limit is stricter
+				MaxBlobCount: *gnosisConfig.MaxBlobsPerTransaction,
 				MinTip:       big.NewInt(0),
 			}
 			err := ValidateTransaction(tx, head, signer, opts)
@@ -205,13 +205,13 @@ func createBlobTx(key *ecdsa.PrivateKey, config *params.ChainConfig, blobCount i
 		var blob kzg4844.Blob
 		blob[0] = byte(i + 1) // non-zero so each blob is unique
 		commit, _ := kzg4844.BlobToCommitment(&blob)
-		proof, _ := kzg4844.ComputeBlobProof(&blob, commit)
+		cellProofs, _ := kzg4844.ComputeCellProofs(&blob)
 		blobs = append(blobs, blob)
 		commitments = append(commitments, commit)
-		proofs = append(proofs, proof)
+		proofs = append(proofs, cellProofs...)
 		hashes = append(hashes, kzg4844.CalcBlobHashV1(sha256.New(), &commit))
 	}
-	sidecar := types.NewBlobTxSidecar(types.BlobSidecarVersion0, blobs, commitments, proofs)
+	sidecar := types.NewBlobTxSidecar(types.BlobSidecarVersion1, blobs, commitments, proofs)
 	blobtx := &types.BlobTx{
 		ChainID:    uint256.MustFromBig(config.ChainID),
 		Nonce:      0,

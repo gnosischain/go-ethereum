@@ -58,7 +58,7 @@ func newTestCache(t *testing.T, txConfig []txSpec) *testCache {
 	if err := os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	store, err := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(params.DefaultBlobTxMaxBlobs), nil)
+	store, err := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotterEIP7594(params.DefaultBlobTxMaxBlobs), nil)
 	if err != nil {
 		t.Fatalf("billy open: %v", err)
 	}
@@ -70,7 +70,7 @@ func newTestCache(t *testing.T, txConfig []txSpec) *testCache {
 	)
 	for _, s := range txConfig {
 		key, _ := crypto.GenerateKey()
-		tx := makeMultiBlobTx(0, s.tip, 1_000_000, 1_000_000, s.blobs, offset, key, types.BlobSidecarVersion1)
+		tx := makeMultiBlobTx(0, s.tip, 1_000_000, 1_000_000, s.blobs, offset, key)
 		if _, err := store.Put(encodeForPool(tx)); err != nil {
 			t.Fatalf("store put: %v", err)
 		}
@@ -94,7 +94,7 @@ func newTestCache(t *testing.T, txConfig []txSpec) *testCache {
 		CancunTime:  &cancunTime,
 		OsakaTime:   &cancunTime,
 		BlobScheduleConfig: &params.BlobScheduleConfig{
-			Osaka: &params.BlobConfig{
+			Cancun: &params.BlobConfig{
 				Target:         1,
 				Max:            1,
 				UpdateFraction: params.DefaultCancunBlobConfig.UpdateFraction,
@@ -143,10 +143,13 @@ func newTestCache(t *testing.T, txConfig []txSpec) *testCache {
 func (tc *testCache) inject(t *testing.T, spec txSpec) []common.Hash {
 	t.Helper()
 	key, _ := crypto.GenerateKey()
-	tx := makeMultiBlobTx(0, spec.tip, 1_000_000, 1_000_000, spec.blobs, tc.offset, key, types.BlobSidecarVersion1)
+	tx := makeMultiBlobTx(0, spec.tip, 1_000_000, 1_000_000, spec.blobs, tc.offset, key)
 	tc.offset += spec.blobs
 
-	ptx := newBlobTxForPool(tx)
+	ptx, err := newBlobTxForPool(tx)
+	if err != nil {
+		t.Fatalf("new blob tx for pool: %v", err)
+	}
 
 	tc.blobpool.lock.Lock()
 	defer tc.blobpool.lock.Unlock()
@@ -155,7 +158,7 @@ func (tc *testCache) inject(t *testing.T, spec txSpec) []common.Hash {
 	if err != nil {
 		t.Fatalf("store put: %v", err)
 	}
-	meta := newBlobTxMeta(id, ptx.TxSize(), tc.blobpool.store.Size(id), ptx)
+	meta := newBlobTxMeta(id, tc.blobpool.store.Size(id), ptx)
 	addr := crypto.PubkeyToAddress(key.PublicKey)
 	tc.blobpool.index[addr] = append(tc.blobpool.index[addr], meta)
 	tc.blobpool.lookup.track(meta)
