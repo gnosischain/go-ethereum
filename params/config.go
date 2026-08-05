@@ -775,24 +775,6 @@ func (c *ChainConfig) GetMaxBlobsPerTransaction() int {
 	return DefaultBlobTxMaxBlobs
 }
 
-// GetMinBlobGasPrice returns the chain-specific minimum blob gas price,
-// falling back to the global default if not set.
-func (c *ChainConfig) GetMinBlobGasPrice() uint64 {
-	if c != nil && c.MinBlobGasPrice != nil {
-		return *c.MinBlobGasPrice
-	}
-	return DefaultBlobTxMinBlobGasprice
-}
-
-// GetMaxBlobsPerTransaction returns the chain-specific max blobs per tx,
-// falling back to the global default if not set.
-func (c *ChainConfig) GetMaxBlobsPerTransaction() int {
-	if c != nil && c.MaxBlobsPerTransaction != nil {
-		return *c.MaxBlobsPerTransaction
-	}
-	return DefaultBlobTxMaxBlobs
-}
-
 // IsHomestead returns whether num is either equal to the homestead block or greater.
 func (c *ChainConfig) IsHomestead(num *big.Int) bool {
 	return isBlockForked(c.HomesteadBlock, num)
