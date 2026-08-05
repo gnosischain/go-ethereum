@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"sort"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -820,11 +821,23 @@ var Forks = map[string]*params.ChainConfig{
 	},
 }
 
+const gnosisForkPrefix = "Gnosis"
+
 func init() {
 	// Execution-spec-tests fixtures use the historical upgrade names for
 	// the EIP150 and EIP158 rulesets.
 	Forks["TangerineWhistle"] = Forks["EIP150"]
 	Forks["SpuriousDragon"] = Forks["EIP158"]
+
+	withdrawalContract := common.HexToAddress("0xbabe2bed00000000000000000000000000000003")
+	auraConfig := *params.ChiadoChainConfig.Aura
+	auraConfig.WithdrawalContractAddress = &withdrawalContract
+
+	for _, name := range AvailableForks() {
+		config := *Forks[name]
+		config.Aura = &auraConfig
+		Forks[gnosisForkPrefix+name] = &config
+	}
 }
 
 // AvailableForks returns the set of defined fork names

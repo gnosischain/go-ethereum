@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
@@ -160,6 +161,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 		isEIP4762   = chainConfig.IsUBT(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 		isAmsterdam = chainConfig.IsAmsterdam(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
+		isAuRa      = chainConfig.Aura != nil
 	)
 	if pre.AllocPath != "" {
 		var err error
@@ -319,7 +321,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 	// TODO(rjl493456442) call engine.Finalize() instead
 	// Add mining reward? (-1 means rewards are disabled)
-	if miningReward >= 0 {
+	if miningReward >= 0 && !isAuRa {
 		// Add mining reward. The mining reward may be `0`, which only makes a difference in the cases
 		// where
 		// - the coinbase self-destructed, or
@@ -343,24 +345,30 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		statedb.AddBalance(pre.Env.Coinbase, uint256.MustFromBig(minerReward), tracing.BalanceIncreaseRewardMineBlock)
 	}
 	// Apply withdrawals
-	for _, w := range pre.Env.Withdrawals {
-		// Amount is in gwei, turn into wei
-		amount := new(big.Int).Mul(new(big.Int).SetUint64(w.Amount), big.NewInt(params.GWei))
-		prev := statedb.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
+	if !isAuRa {
+		for _, w := range pre.Env.Withdrawals {
+			// Amount is in gwei, turn into wei
+			amount := new(big.Int).Mul(new(big.Int).SetUint64(w.Amount), big.NewInt(params.GWei))
+			prev := statedb.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
 
-		if isEIP4762 {
-			statedb.AccessEvents().AddAccount(w.Address, true, stdmath.MaxUint64)
-		}
-		if isAmsterdam {
-			if w.Amount == 0 {
-				// Zero amount withdrawal, account is accessed potential
-				// without state changes.
-				blockAccessList.AccountRead(w.Address)
-			} else {
-				// Non-zero amount withdrawal, account is accessed with
-				// a balance change.
-				blockAccessList.BalanceChange(uint32(len(receipts)+1), w.Address, new(uint256.Int).Add(&prev, uint256.MustFromBig(amount)))
+			if isEIP4762 {
+				statedb.AccessEvents().AddAccount(w.Address, true, stdmath.MaxUint64)
 			}
+			if isAmsterdam {
+				if w.Amount == 0 {
+					// Zero amount withdrawal, account is accessed potential
+					// without state changes.
+					blockAccessList.AccountRead(w.Address)
+				} else {
+					// Non-zero amount withdrawal, account is accessed with
+					// a balance change.
+					blockAccessList.BalanceChange(uint32(len(receipts)+1), w.Address, new(uint256.Int).Add(&prev, uint256.MustFromBig(amount)))
+				}
+			}
+		}
+	} else {
+		if err := pre.applyAuRaFinalization(chainConfig, statedb, evm); err != nil {
+			return nil, nil, nil, err
 		}
 	}
 
@@ -424,6 +432,20 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 	body, _ := rlp.EncodeToBytes(includedTxs)
 	return statedb, execRs, body, nil
+}
+
+func (pre *Prestate) applyAuRaFinalization(chainConfig *params.ChainConfig, statedb *state.StateDB, evm *vm.EVM) error {
+	// Only the coinbase and block number are consulted when computing rewards.
+	header := &types.Header{Coinbase: pre.Env.Coinbase, Number: evm.Context.BlockNumber}
+	if err := aura.ApplyRewards(chainConfig, header, statedb, evm); err != nil {
+		return NewError(ErrorEVM, fmt.Errorf("failed applying AuRa block reward: %v", err))
+	}
+	if pre.Env.Withdrawals != nil {
+		if err := aura.ExecuteSystemWithdrawals(chainConfig, evm, pre.Env.Withdrawals); err != nil {
+			return NewError(ErrorEVM, fmt.Errorf("failed applying AuRa withdrawals: %v", err))
+		}
+	}
+	return nil
 }
 
 // newPrestateTrieDBConfig returns the triedb config used to construct the
