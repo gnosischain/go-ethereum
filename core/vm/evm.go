@@ -18,7 +18,6 @@ package vm
 
 import (
 	"errors"
-	"math"
 	"math/big"
 	"sync/atomic"
 
@@ -782,9 +781,4 @@ func (evm *EVM) GetVMContext() *tracing.VMContext {
 // GetRules returns the chain rules used throughout the EVM execution.
 func (evm *EVM) GetRules() params.Rules {
 	return evm.chainRules
-}
-
-func (evm *EVM) SysCreate(caller common.Address, code []byte, endowment *uint256.Int, contractAddr common.Address) (ret []byte, err error) {
-	ret, _, _, err = evm.create(caller, code, NewGasBudget(math.MaxUint64, 0), endowment, contractAddr, CREATE, false /* incrementNonce */)
-	return
 }
