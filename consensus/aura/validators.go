@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	lru "github.com/hashicorp/golang-lru/v2"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -232,7 +230,6 @@ func NewSimpleList(validators []common.Address) *SimpleList {
 // nolint
 type ValidatorSafeContract struct {
 	contractAddress common.Address
-	validators      *lru.Cache[common.Hash, *SimpleList] // RwLock<MemoryLruCache<H256, SimpleList>>,
 	// The block number where we resent the queued reports last time.
 	resentReportsInBlock atomic.Uint64
 	// If set, this is the block number at which the consensus engine switches from AuRa to AuRa
@@ -243,17 +240,11 @@ type ValidatorSafeContract struct {
 }
 
 func NewValidatorSafeContract(contractAddress common.Address, posdaoTransition *uint64) *ValidatorSafeContract {
-	const MemoizeCapacity = 500
-	c, err := lru.New[common.Hash, *SimpleList](MemoizeCapacity)
-	if err != nil {
-		panic("error creating ValidatorSafeContract cache")
-	}
-
 	parsed, err := abi.JSON(strings.NewReader(auraabi.ValidatorSetABI))
 	if err != nil {
 		panic(err)
 	}
-	return &ValidatorSafeContract{contractAddress: contractAddress, posdaoTransition: posdaoTransition, validators: c, abi: parsed}
+	return &ValidatorSafeContract{contractAddress: contractAddress, posdaoTransition: posdaoTransition, abi: parsed}
 }
 
 // Called for each new block this node is creating.  If this block is
