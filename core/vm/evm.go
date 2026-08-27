@@ -521,7 +521,7 @@ func (evm *EVM) chargeAccountCreation(scope *ScopeContext, contractAddr common.A
 }
 
 // create creates a new contract using code as deployment code.
-func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int, address common.Address, typ OpCode, incrementSenderNonce bool) (ret []byte, createAddress common.Address, result GasBudget, err error) {
+func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int, address common.Address, typ OpCode) (ret []byte, createAddress common.Address, result GasBudget, err error) {
 	// Since Amsterdam, the precheck has been folded into the parent frame
 	// due to account-creation determination, so skip the duplicate check here.
 	if !evm.chainRules.IsAmsterdam {
@@ -536,10 +536,7 @@ func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value 
 	if err != nil {
 		return nil, common.Address{}, gas, err
 	}
-	if incrementSenderNonce {
-		// Increment the caller's nonce after passing all validations
-		evm.StateDB.SetNonce(caller, evm.StateDB.GetNonce(caller)+1, tracing.NonceChangeContractCreator)
-	}
+	evm.StateDB.SetNonce(caller, evm.StateDB.GetNonce(caller)+1, tracing.NonceChangeContractCreator)
 
 	// Charge the contract creation init gas in verkle mode
 	if evm.chainRules.IsEIP4762 {
@@ -693,7 +690,7 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address) ([]b
 // Create creates a new contract using code as deployment code.
 func (evm *EVM) Create(caller common.Address, code []byte, gas GasBudget, value *uint256.Int) (ret []byte, contractAddr common.Address, result GasBudget, err error) {
 	contractAddr = crypto.CreateAddress(caller, evm.StateDB.GetNonce(caller))
-	return evm.create(caller, code, gas, value, contractAddr, CREATE, true)
+	return evm.create(caller, code, gas, value, contractAddr, CREATE)
 }
 
 // Create2 creates a new contract using code as deployment code.
@@ -703,7 +700,7 @@ func (evm *EVM) Create(caller common.Address, code []byte, gas GasBudget, value 
 func (evm *EVM) Create2(caller common.Address, code []byte, gas GasBudget, endowment *uint256.Int, salt *uint256.Int) (ret []byte, contractAddr common.Address, result GasBudget, err error) {
 	inithash := crypto.Keccak256Hash(code)
 	contractAddr = crypto.CreateAddress2(caller, salt.Bytes32(), inithash[:])
-	return evm.create(caller, code, gas, endowment, contractAddr, CREATE2, true)
+	return evm.create(caller, code, gas, endowment, contractAddr, CREATE2)
 }
 
 // resolveCode returns the code associated with the provided account. After
