@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"slices"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -132,32 +130,6 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	return &genesis, nil
 }
 
-// SysCreate is a special (system) contract creation methods for genesis constructors.
-func SysCreate(contract common.Address, data []byte, chainConfig *params.ChainConfig, statedb *state.StateDB, header *types.Header) (result []byte, err error) {
-	msg := &Message{
-		From:     contract,
-		Nonce:    0,
-		Value:    uint256.NewInt(0),
-		GasLimit: 30_000_000,
-		GasPrice: uint256.NewInt(0),
-		// GasFeeCap, GasTipCap,
-		Data:   data,
-		isFree: true,
-	}
-	vmConfig := vm.Config{}
-	// Create a new context to be used in the EVM environment
-	author := &contract
-	blockContext := NewEVMBlockContext(header, nil, author)
-	evm := vm.NewEVM(blockContext, statedb, chainConfig, vmConfig)
-
-	return evm.SysCreate(
-		msg.From,
-		msg.Data,
-		msg.Value,
-		contract,
-	)
-}
-
 // hashAlloc computes the state root according to the genesis specification.
 func hashAlloc(ga *types.GenesisAlloc, isUBT bool) (common.Hash, error) {
 	// If a genesis-time verkle trie is requested, create a trie config
@@ -182,32 +154,12 @@ func hashAlloc(ga *types.GenesisAlloc, isUBT bool) (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
-	keys := make([]string, len(*ga))
-	i := 0
-	for k := range *ga {
-		keys[i] = string(k.Bytes())
-		i++
-	}
-	slices.Sort(keys)
-	for _, key := range keys {
-		addr := common.BytesToAddress([]byte(key))
-		account := (*ga)[addr]
+	for addr, account := range *ga {
 		if account.Balance != nil {
 			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
 		}
-		if len(account.Constructor) != 0 {
-			// hardcode chiado since this is the only use case we have for the time being.
-			// things could be cleaner, but it would increase the diff with geth.
-			code, err := SysCreate(addr, account.Constructor, params.ChiadoChainConfig, statedb, &types.Header{Difficulty: big.NewInt(131072), Number: big.NewInt(0)})
-			if err != nil {
-				panic(err)
-			}
-			statedb.SetCode(addr, code, tracing.CodeChangeGenesis)
-			statedb.SetNonce(addr, 1, tracing.NonceChangeGenesis)
-		} else {
-			statedb.SetCode(addr, account.Code, tracing.CodeChangeGenesis)
-			statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
-		}
+		statedb.SetCode(addr, account.Code, tracing.CodeChangeGenesis)
+		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
@@ -226,34 +178,14 @@ func flushAlloc(ga *types.GenesisAlloc, triedb *triedb.Database, tracer *tracing
 	if err != nil {
 		return common.Hash{}, err
 	}
-	keys := make([]string, len(*ga))
-	i := 0
-	for k := range *ga {
-		keys[i] = string(k.Bytes())
-		i++
-	}
-	slices.Sort(keys)
-	for _, key := range keys {
-		addr := common.BytesToAddress([]byte(key))
-		account := (*ga)[addr]
+	for addr, account := range *ga {
 		if account.Balance != nil {
 			// This is not actually logged via tracer because OnGenesisBlock
 			// already captures the allocations.
 			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
 		}
-		if len(account.Constructor) != 0 {
-			// hardcode chiado since this is the only use case we have for the time being.
-			// things could be cleaner, but it would increase the diff with geth.
-			code, err := SysCreate(addr, account.Constructor, params.ChiadoChainConfig, statedb, &types.Header{Difficulty: big.NewInt(131072), Number: big.NewInt(0)})
-			if err != nil {
-				panic(err)
-			}
-			statedb.SetCode(addr, code, tracing.CodeChangeGenesis)
-			statedb.SetNonce(addr, 1, tracing.NonceChangeGenesis)
-		} else {
-			statedb.SetCode(addr, account.Code, tracing.CodeChangeGenesis)
-			statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
-		}
+		statedb.SetCode(addr, account.Code, tracing.CodeChangeGenesis)
+		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
