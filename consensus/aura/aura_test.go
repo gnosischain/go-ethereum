@@ -1,56 +1,48 @@
 package aura_test
 
-// import (
-// 	"testing"
+import (
+	"testing"
 
-// 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 
-// 	"github.com/ethereum/go-ethereum-lib/kv/memdb"
-// 	libcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/aura"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/params"
+)
 
-// 	"github.com/ethereum/go-ethereum/consensus/aura"
-// 	"github.com/ethereum/go-ethereum/core"
-// 	"github.com/ethereum/go-ethereum/core/types"
-// 	"github.com/ethereum/go-ethereum/trie"
-// )
+// TestGnosisEmptyBlock checks that blocks in the shape of the first blocks of
+// Gnosis Chain, which carry no transactions and predate the block reward
+// contract (blockReward is 0 until block 1310), do not change the state root:
+// the zero-value reward paid to the validator must not leave an empty account
+// behind.
+func TestGnosisEmptyBlock(t *testing.T) {
+	const blocks = 4
 
-// Check that the first block of Gnosis Chain, which doesn't have any transactions,
-// does not change the state root.
-// func TestEmptyBlock(t *testing.T) {
-// 	require := require.New(t)
-// 	genesis := core.DefaultGnosisGenesisBlock()
-// 	genesisBlock := genesis.ToBlock()
+	genesis := core.DefaultGnosisGenesisBlock()
 
-// 	genesis.Config.TerminalTotalDifficultyPassed = false
+	engine, err := aura.NewAuRa(genesis.Config.Aura, rawdb.NewMemoryDatabase())
+	require.NoError(t, err)
+	defer engine.Close()
 
-// 	chainConfig := genesis.Config
-// 	auraDB := memdb.NewTestDB(t)
-// 	engine, err := aura.NewAuRa(chainConfig.Aura, auraDB)
-// 	require.NoError(err)
-// 	m := stages.MockWithGenesisEngine(t, genesis, engine, false)
+	// The only validator of the initial Gnosis epoch, and the author of block 1.
+	validator := common.HexToAddress("0xcace5b3c29211740e595850e80478416ee77ca21")
 
-// 	time := uint64(1539016985)
-// 	header := core.MakeEmptyHeader(genesisBlock.Header(), chainConfig, time, nil)
-// 	header.UncleHash = types.EmptyUncleHash
-// 	header.TxHash = trie.EmptyRoot
-// 	header.ReceiptHash = trie.EmptyRoot
-// 	header.Coinbase = libcommon.HexToAddress("0xcace5b3c29211740e595850e80478416ee77ca21")
-// 	header.Difficulty = engine.CalcDifficulty(nil, time,
-// 		0,
-// 		genesisBlock.Difficulty(),
-// 		genesisBlock.NumberU64(),
-// 		genesisBlock.Hash(),
-// 		genesisBlock.UncleHash(),
-// 		genesisBlock.Header().AuRaStep,
-// 	)
+	db, chain, _ := core.GenerateChainWithGenesis(genesis, beacon.New(engine), blocks, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(validator)
+	})
+	for _, block := range chain {
+		require.Equal(t, params.GnosisGenesisStateRoot, block.Root(), "empty block %d changed the state root", block.NumberU64())
+	}
 
-// 	block := types.NewBlockWithHeader(header)
+	bc, err := core.NewBlockChain(db, genesis, beacon.New(engine), nil)
+	require.NoError(t, err)
+	defer bc.Stop()
 
-// 	headers, blocks, receipts := make([]*types.Header, 1), make(types.Blocks, 1), make([]types.Receipts, 1)
-// 	headers[0] = header
-// 	blocks[0] = block
-
-// 	chain := &core.ChainPack{Headers: headers, Blocks: blocks, Receipts: receipts, TopBlock: block}
-// 	err = m.InsertChain(chain)
-// 	require.NoError(err)
-// }
+	n, err := bc.InsertChain(chain)
+	require.NoError(t, err)
+	require.Equal(t, blocks, n)
+	require.Equal(t, chain[blocks-1].Hash(), bc.CurrentBlock().Hash())
+}

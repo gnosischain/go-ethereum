@@ -26,7 +26,6 @@ import (
 	"math"
 	"math/big"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -698,11 +697,7 @@ func isEpochEnd(chain consensus.ChainHeaderReader, e *NonTransactionalEpochReade
 	// commit_block -> aura.is_epoch_end
 	for i := range finalized {
 		pendingTransitionProof, err := e.GetPendingEpoch(finalized[i].hash, finalized[i].number)
-		// GNOSIS: pebble returns an error when a non-existent value
-		// isn't found, which is what happens at genesis.
-		// using raw string to remove pebble import which was breaking
-		// cmd/keeper build on MIPSLE target
-		if err != nil && !strings.Contains(err.Error(), "pebble: not found") {
+		if err != nil {
 			return nil, err
 		}
 		if pendingTransitionProof == nil {
