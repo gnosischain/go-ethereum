@@ -7,11 +7,23 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
+// readEpochProof retrieves the proof stored under key, returning a nil proof if
+// the key is absent. Key-value backends signal a missing key with their own
+// error value (pebble, leveldb and memorydb all differ), so presence is probed
+// explicitly instead of matching on the returned error.
+func readEpochProof(db ethdb.KeyValueReader, key []byte) (transitionProof []byte, err error) {
+	ok, err := db.Has(key)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return db.Get(key)
+}
+
 func ReadEpoch(db ethdb.KeyValueReader, blockNum uint64, blockHash common.Hash) (transitionProof []byte, err error) {
 	k := make([]byte, 40 /* block num uint64 + block hash */)
 	binary.BigEndian.PutUint64(k, blockNum)
 	copy(k[8:], blockHash[:])
-	return db.Get(epochKey(k))
+	return readEpochProof(db, epochKey(k))
 }
 
 // TODO use sqlite if leveldb doesn't work
@@ -54,7 +66,7 @@ func ReadPendingEpoch(db ethdb.KeyValueReader, blockNum uint64, blockHash common
 	k := make([]byte, 8+32)
 	binary.BigEndian.PutUint64(k, blockNum)
 	copy(k[8:], blockHash[:])
-	return db.Get(pendingEpochKey(k))
+	return readEpochProof(db, pendingEpochKey(k))
 }
 
 func WritePendingEpoch(db ethdb.KeyValueWriter, blockNum uint64, blockHash common.Hash, transitionProof []byte) (err error) {
