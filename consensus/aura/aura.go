@@ -55,8 +55,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-const DEBUG_LOG_FROM = 999_999_999
-
 var (
 	allowedFutureBlockTimeSeconds = int64(15) // Max seconds from current time allowed for blocks, before they're considered future blocks
 
@@ -193,9 +191,6 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 	// DB lookup.
 	lastTransition, ok := epochTransitionFor(chain, er, hash)
 	if !ok {
-		if lastTransition.BlockNumber > DEBUG_LOG_FROM {
-			fmt.Printf("zoom1: %d\n", lastTransition.BlockNumber)
-		}
 		return false
 	}
 
@@ -206,9 +201,6 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 			panic(err)
 		}
 		first := proof.SignalNumber == 0
-		if lastTransition.BlockNumber > DEBUG_LOG_FROM {
-			fmt.Printf("zoom2: %d,%d\n", lastTransition.BlockNumber, len(proof.SetProof))
-		}
 
 		// use signal number so multi-set first calculation is correct.
 		list, _, err := validators.epochSet(first, proof.SignalNumber, proof.SetProof, evm)
@@ -218,12 +210,6 @@ func (e *EpochManager) zoomToAfter(chain consensus.ChainHeaderReader, er *NonTra
 		epochSet := list.validators
 		log.Trace("[aura] Updating finality checker with new validator set extracted from epoch", "num", lastTransition.BlockNumber)
 		e.finalityChecker = NewRollingFinality(epochSet)
-		if proof.SignalNumber >= DEBUG_LOG_FROM {
-			fmt.Printf("new rolling finality: %d\n", proof.SignalNumber)
-			for _, e := range epochSet {
-				fmt.Printf("\t%x\n", e)
-			}
-		}
 	}
 
 	e.epochTransitionHash = lastTransition.BlockHash
@@ -310,7 +296,6 @@ func NewAuRa(spec *params.AuRaConfig, db ethdb.KeyValueStore) (*AuRa, error) {
 			return nil, fmt.Errorf("authority Round step duration cannot be 0")
 		}
 	}
-	//shouldTimeout := auraParams.StartStep == nil
 	initialStep := uint64(0)
 	if auraParams.StartStep != nil {
 		initialStep = *auraParams.StartStep
@@ -634,17 +619,11 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	}
 
 	// check_and_lock_block -> check_epoch_end_signal (after enact)
-	if header.Number.Uint64() >= DEBUG_LOG_FROM {
-		fmt.Printf("finalize1: %d,%d\n", header.Number.Uint64(), len(receipts))
-	}
 	pendingTransitionProof, err := c.cfg.Validators.signalEpochEnd(header.Number.Uint64() == 0, header, receipts)
 	if err != nil {
 		panic(err)
 	}
 	if pendingTransitionProof != nil {
-		if header.Number.Uint64() >= DEBUG_LOG_FROM {
-			fmt.Printf("insert_pending_transition: %d,receipts=%d, lenProof=%d\n", header.Number.Uint64(), len(receipts), len(pendingTransitionProof))
-		}
 		if err = c.e.PutPendingEpoch(header.Hash(), header.Number.Uint64(), pendingTransitionProof); err != nil {
 			panic(err)
 		}
@@ -652,7 +631,6 @@ func (c *AuRa) Finalize(chain consensus.ChainHeaderReader, header *types.Header,
 	// check_and_lock_block -> check_epoch_end_signal END
 
 	finalized := buildFinality(c.EpochManager, chain, c.e, c.cfg.Validators, header, evm)
-	c.EpochManager.finalityChecker.print(header.Number.Uint64())
 	epochEndProof, err := isEpochEnd(chain, c.e, finalized, header)
 	if err != nil {
 		panic(err)
@@ -680,14 +658,12 @@ func buildFinality(e *EpochManager, chain consensus.ChainHeaderReader, er *NonTr
 			}
 			return []common.Address{h.Coinbase}, h.Hash(), h.ParentHash, h.Number.Uint64(), true
 		}, header.ParentHash, e.epochTransitionHash); err != nil {
-			//log.Warn("[aura] buildAncestrySubChain", "err", err)
 			return []unAssembledHeader{}
 		}
 	}
 
 	res, err := e.finalityChecker.push(header.Hash(), header.Number.Uint64(), []common.Address{header.Coinbase})
 	if err != nil {
-		//log.Warn("[aura] finalityChecker.push", "err", err)
 		return []unAssembledHeader{}
 	}
 	return res
@@ -702,9 +678,6 @@ func isEpochEnd(chain consensus.ChainHeaderReader, e *NonTransactionalEpochReade
 		}
 		if pendingTransitionProof == nil {
 			continue
-		}
-		if header.Number.Uint64() >= DEBUG_LOG_FROM {
-			fmt.Printf("pending transition: %d,%x,len=%d\n", finalized[i].number, finalized[i].hash, len(pendingTransitionProof))
 		}
 
 		finalityProof := allHeadersUntil(chain, header, finalized[i].hash)
@@ -777,16 +750,6 @@ func (c *AuRa) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHea
 	block := types.NewBlock(header, body, receipts, trie.NewStackTrie(nil))
 	blockSpanEnd(nil)
 	return block, nil
-}
-
-// Authorize injects a private key into the consensus engine to mint new blocks
-// with.
-func (c *AuRa) Authorize(signer common.Address) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	//c.signer = signer
-	//c.signFn = signFn
 }
 
 func (c *AuRa) GenesisEpochData(header *types.Header) ([]byte, error) {
@@ -962,16 +925,6 @@ func executeSystemWithdrawals(config *AuthorityRoundParams, evm *vm.EVM, withdra
 	return err
 }
 
-// An empty step message that is included in a seal, the only difference is that it doesn't include
-// the `parent_hash` in order to save space. The included signature is of the original empty step
-// message, which can be reconstructed by using the parent hash of the block in which this sealed
-// empty message is included.
-// nolint
-type SealedEmptyStep struct {
-	signature []byte // H520
-	step      uint64
-}
-
 // A message broadcast by authorities when it's their turn to seal a block but there are no
 // transactions. Other authorities accumulate these messages and later include them in the seal as
 // proof.
@@ -1105,22 +1058,6 @@ func NewRollingFinality(signers []common.Address) *RollingFinality {
 	}
 }
 
-// Clears the finality status, but keeps the validator set.
-func (f *RollingFinality) print(num uint64) {
-	if num > DEBUG_LOG_FROM {
-		h := f.headers
-		i := 0
-		for e := h.l.Front(); e != nil; e = e.Next() {
-			i++
-			a := e.Value.(*unAssembledHeader)
-			fmt.Printf("\t%d,%x\n", a.number, a.signers[0])
-		}
-		if i == 0 {
-			fmt.Printf("\tempty\n")
-		}
-	}
-}
-
 func (f *RollingFinality) clear() {
 	f.headers = unAssembledHeaders{l: list.New()}
 	f.signCount = map[common.Address]uint{}
@@ -1218,7 +1155,6 @@ func (f *RollingFinality) buildAncestrySubChain(get func(hash common.Hash) ([]co
 				panic("we just pushed a block")
 			}
 			f.removeSigners(e.signers)
-			//log.Info("[aura] finality encountered already finalized block", "hash", e.hash.String(), "number", e.number)
 			break
 		}
 

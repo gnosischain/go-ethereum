@@ -46,34 +46,6 @@ type ValidatorSet interface {
 	// Extract genesis epoch data from the genesis state and header.
 	genesisEpochData(header *types.Header) ([]byte, error)
 
-	/*
-	 // Returns the current number of validators.
-	    fn count(&self, parent: &H256) -> usize {
-	        let default = self.default_caller(BlockId::Hash(*parent));
-	        self.count_with_caller(parent, &*default)
-	    }
-
-	    // Signalling that a new epoch has begun.
-	    //
-	    // All calls here will be from the `SYSTEM_ADDRESS`: 2^160 - 2
-	    // and will have an effect on the block's state.
-	    // The caller provided here may not generate proofs.
-	    //
-	    // `first` is true if this is the first block in the set.
-	    fn on_epoch_begin(
-	        &self,
-	        _first: bool,
-	        _header: &Header,
-	        _call: &mut SystemCall,
-	    ) -> Result<(), ::error::Error> {
-	        Ok(())
-	    }
-
-	    // Extract genesis epoch data from the genesis state and header.
-	    fn genesis_epoch_data(&self, _header: &Header, _call: &Call) -> Result<Vec<u8>, String> {
-	        Ok(Vec::new())
-	    }
-	*/
 	// Whether this block is the last one in its epoch.
 	//
 	// Indicates that the validator set changed at the given block in a manner
@@ -81,60 +53,6 @@ type ValidatorSet interface {
 	//
 	// `first` is true if this is the first block in the set.
 	signalEpochEnd(firstInEpoch bool, header *types.Header, receipts types.Receipts) ([]byte, error)
-	/*
-	   // Whether the given block signals the end of an epoch, but change won't take effect
-	   // until finality.
-	   //
-	   // Engine should set `first` only if the header is genesis. Multiplexing validator
-	   // sets can set `first` to internal changes.
-	   fn signals_epoch_end(
-	       &self,
-	       first: bool,
-	       header: &Header,
-	       aux: AuxiliaryData,
-	   ) -> ::engines::EpochChange<EthereumMachine>;
-
-	   // Recover the validator set from the given proof, the block number, and
-	   // whether this header is first in its set.
-	   //
-	   // May fail if the given header doesn't kick off an epoch or
-	   // the proof is invalid.
-	   //
-	   // Returns the set, along with a flag indicating whether finality of a specific
-	   // hash should be proven.
-	   fn epoch_set(
-	       &self,
-	       first: bool,
-	       machine: &EthereumMachine,
-	       number: BlockNumber,
-	       proof: &[u8],
-	   ) -> Result<(SimpleList, Option<H256>), ::error::Error>;
-
-	   // Checks if a given address is a validator, with the given function
-	   // for executing synchronous calls to contracts.
-	   fn contains_with_caller(
-	       &self,
-	       parent_block_hash: &H256,
-	       address: &Address,
-	       caller: &Call,
-	   ) -> bool;
-
-	   // Draws an validator nonce modulo number of validators.
-	   fn get_with_caller(&self, parent_block_hash: &H256, nonce: usize, caller: &Call) -> Address;
-
-
-	   // Notifies about malicious behaviour.
-	   fn report_malicious(
-	       &self,
-	       _validator: &Address,
-	       _set_block: BlockNumber,
-	       _block: BlockNumber,
-	       _proof: Bytes,
-	   ) {
-	   }
-	   // Notifies about benign misbehaviour.
-	   fn report_benign(&self, _validator: &Address, _set_block: BlockNumber, _block: BlockNumber) {}
-	*/
 }
 
 // nolint
@@ -178,8 +96,6 @@ func (s *Multi) correctSetByNumber(parentNumber uint64) (uint64, ValidatorSet) {
 	panic("constructor validation ensures that there is at least one validator set for block 0; block 0 is less than any uint; qed")
 }
 
-// TODO: do we need add `proof` argument?
-// nolint
 func (s *Multi) epochSet(firstInEpoch bool, num uint64, proof []byte, evm *vm.EVM) (SimpleList, common.Hash, error) {
 	setBlock, set := s.correctSetByNumber(num)
 	firstInEpoch = setBlock == num
@@ -268,14 +184,6 @@ func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof
 			panic(1)
 		}
 
-		//addresses, err := checkFirstValidatorSetProof(s.contractAddress, oldHeader, state_items)
-		//if err != nil {
-		//	panic(err)
-		//	return SimpleList{}, common.Hash{}, fmt.Errorf("insufitient proof: block=%d,%x: %w", oldHeader.Number.Uint64(), oldHeader.Hash(), err)
-		//}
-
-		//fmt.Printf("aaaa: %x,%x\n", common.HexToAddress("0xe8ddc5c7a2d2f0d7a9798459c0104fdf5e987aca"), params.SokolGenesisHash)
-		//fmt.Printf("bbbbb: %x,%x\n", proof.ContractAddress, proof.Header.Hash())
 		return *l, proof.Header.ParentHash, nil
 	}
 	var proof ValidatorSetProof
@@ -283,44 +191,12 @@ func (s *ValidatorSafeContract) epochSet(firstInEpoch bool, num uint64, setProof
 		return SimpleList{}, common.Hash{}, fmt.Errorf("[ValidatorSafeContract.epochSet] %w", err)
 	}
 
-	if num > DEBUG_LOG_FROM {
-		fmt.Printf("epoch_set1: %d,%d,%d\n", proof.Header.Number.Uint64(), len(setProof), len(proof.Receipts))
-	}
 	ll, ok := s.extractFromEvent(proof.Header, proof.Receipts)
 	if !ok {
 		panic(1)
 	}
 
-	// ensure receipts match header.
-	// TODO: optimize? these were just decoded.
-	/*
-	   let found_root = ::triehash::ordered_trie_root(receipts.iter().map(|r| r.encode()));
-	   if found_root != *old_header.receipts_root() {
-	       return Err(::error::BlockError::InvalidReceiptsRoot(Mismatch {
-	           expected: *old_header.receipts_root(),
-	           found: found_root,
-	       })
-	       .into());
-	   }
-
-	   let bloom = self.expected_bloom(&old_header);
-
-	   match self.extract_from_event(bloom, &old_header, &receipts) {
-	       Some(list) => Ok((list, Some(old_header.hash()))),
-	       None => Err(::engines::EngineError::InsufficientProof(
-	           "No log event in proof.".into(),
-	       )
-	       .into()),
-	   }
-	*/
 	return *ll, common.Hash{}, nil
-	/*
-		setProof, err := decodeValidatorSetProof(proof.SetProof)
-		if err != nil {
-			return SimpleList{}, common.Hash{}, err
-		}
-		_ = setProof
-	*/
 }
 
 func (s *ValidatorSafeContract) getListSyscall(evm *vm.EVM) (*SimpleList, bool) {
@@ -355,35 +231,14 @@ func (s *ValidatorSafeContract) onEpochBegin(header *types.Header, evm *vm.EVM) 
 		return err
 	}
 
-	/*
-	   let data = validator_set::functions::finalize_change::encode_input();
-	   caller(self.contract_address, data)
-	       .map(|_| ())
-	       .map_err(::engines::EngineError::FailedSystemCall)
-	       .map_err(Into::into)
-	*/
 	return nil
 }
 
 func (s *ValidatorSafeContract) signalEpochEnd(firstInEpoch bool, header *types.Header, r types.Receipts) ([]byte, error) {
 	// transition to the first block of a contract requires finality but has no log event.
 	if firstInEpoch {
-		/*
-		   let state_proof = Arc::new(FirstValidatorSetProof {
-		       contract_address: self.contract_address,
-		       header: header.clone(),
-		   });
-		   return ::engines::EpochChange::Yes(::engines::Proof::WithState(state_proof as Arc<_>));
-		*/
 		return rlp.EncodeToBytes(FirstValidatorSetProof{Header: header, ContractAddress: s.contractAddress})
 	}
-
-	// otherwise, we're checking for logs.
-	//let bloom = self.expected_bloom(header);
-	//let header_bloom = header.log_bloom();
-	//if &bloom & header_bloom != bloom {
-	//	return ::engines::EpochChange::No;
-	//}
 
 	_, ok := s.extractFromEvent(header, r)
 	if !ok {
@@ -393,21 +248,12 @@ func (s *ValidatorSafeContract) signalEpochEnd(firstInEpoch bool, header *types.
 	if err != nil {
 		return nil, err
 	}
-	if header.Number.Uint64() >= DEBUG_LOG_FROM {
-		fmt.Printf("signalEpochEnd: %d,%d, proofLen=%d\n", header.Number.Uint64(), len(r), len(proof))
-	}
 	return proof, nil
 }
 
 func (s *ValidatorSafeContract) extractFromEvent(header *types.Header, receipts types.Receipts) (*SimpleList, bool) {
 	if len(receipts) == 0 {
-		if header.Number.Uint64() >= DEBUG_LOG_FROM {
-			fmt.Printf("extractFromEvent1: %d\n", header.Number.Uint64())
-		}
 		return nil, false
-	}
-	if header.Number.Uint64() >= DEBUG_LOG_FROM {
-		fmt.Printf("extractFromEvent111: %d,%d\n", header.Number.Uint64(), len(receipts))
 	}
 
 	// iterate in reverse because only the _last_ change in a given
@@ -415,38 +261,13 @@ func (s *ValidatorSafeContract) extractFromEvent(header *types.Header, receipts 
 	// the contract should only increment the nonce once.
 	for j := len(receipts) - 1; j >= 0; j-- {
 		logs := receipts[j].Logs
-		/*
-			TODO: skipped next bloom check (is it required?)
-					expectedBloom := expected_bloom(&self, header: &Header) -> Bloom {
-				        let topics = vec![*EVENT_NAME_HASH, *header.parent_hash()];
-
-				        debug!(target: "engine", "Expected topics for header {}: {:?}",
-							header.hash(), topics);
-
-				        LogEntry {
-				            address: self.contract_address,
-				            topics: topics,
-				            data: Vec::new(), // irrelevant for bloom.
-				        }
-				        .bloom()
-				    }
-					if !r.log_bloom.contains_bloom(&bloom){
-						continue
-					}
-		*/
 		for i := 0; i < len(logs); i++ {
 			l := logs[i]
-			if header.Number.Uint64() >= DEBUG_LOG_FROM {
-				fmt.Printf("extractFromEvent3: %d\n", header.Number.Uint64())
-			}
 			if len(l.Topics) != 2 {
 				continue
 			}
 			found := l.Address == s.contractAddress && l.Topics[0] == EVENT_NAME_HASH && l.Topics[1] == header.ParentHash
 			if !found {
-				if header.Number.Uint64() >= DEBUG_LOG_FROM {
-					fmt.Printf("extractFromEvent4: %d\n", header.Number.Uint64())
-				}
 				continue
 			}
 
@@ -455,45 +276,11 @@ func (s *ValidatorSafeContract) extractFromEvent(header *types.Header, receipts 
 			if err := contract.UnpackLog(event, "InitiateChange", *l); err != nil {
 				panic(err)
 			}
-			if header.Number.Uint64() >= DEBUG_LOG_FROM {
-				fmt.Printf("extractFromEvent5: %d\n", header.Number.Uint64())
-			}
 
 			// only one last log is taken into account
 			return NewSimpleList(event.NewSet), true
 		}
 	}
-	/*
-					  let check_log = |log: &LogEntry| {
-		            log.address == self.contract_address
-		                && log.topics.len() == 2
-		                && log.topics[0] == *EVENT_NAME_HASH
-		                && log.topics[1] == *header.parent_hash()
-		        };
-
-		        //// iterate in reverse because only the _last_ change in a given
-		        //// block actually has any effect.
-		        //// the contract should only increment the nonce once.
-		        let mut decoded_events = receipts
-		            .iter()
-		            .rev()
-		            .filter(|r| r.log_bloom.contains_bloom(&bloom))
-		            .flat_map(|r| r.logs.iter())
-		            .filter(move |l| check_log(l))
-		            .filter_map(|log| {
-		                validator_set::events::initiate_change::parse_log(
-		                    (log.topics.clone(), log.data.clone()).into(),
-		                )
-		                .ok()
-		            });
-
-		        // only last log is taken into account
-		        decoded_events.next().map(|matched_event| {
-		            let l = SimpleList::new(matched_event.new_set);
-		            println!("matched_event: {:?}", l);
-		            l
-		        })
-	*/
 	return nil, false
 }
 
