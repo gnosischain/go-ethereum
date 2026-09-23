@@ -34,14 +34,6 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	}
 	beneficiariesRes := res[0].([]common.Address)
 	rewardsBig := res[1].([]*big.Int)
-	// rewardsU256 := make([]*big.Int, len(rewardsBig))
-	// for i := 0; i < len(rewardsBig); i++ {
-	// 	var overflow bool
-	// 	rewards[i], overflow = uint256.FromBig(rewardsBig[i])
-	// 	if overflow {
-	// 		panic("Overflow in callBlockRewardAbi")
-	// 	}
-	// }
 	return beneficiariesRes, rewardsBig
 }
 

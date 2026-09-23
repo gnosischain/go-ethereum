@@ -430,12 +430,6 @@ func (beacon *Beacon) Close() error {
 // This function is not suitable for a part of APIs like Prepare or CalcDifficulty
 // because the header difficulty is not set yet.
 func (beacon *Beacon) IsPoSHeader(header *types.Header) bool {
-	// REBASE this should no longer be needed
-	// return header.Difficulty.Cmp(beaconDifficulty) == 0
-	// return header.Number.Cmp(big.NewInt())
-	// non-uint64 block numbers are 2,92271023×10¹² years in
-	// the future, but better be ready.
-	//return !header.Number.IsInt64() || header.Number.Uint64() >= params.GnosisForkBlock || header.Difficulty.Cmp(common.Big0) == 0
 	if header.Difficulty == nil {
 		panic("IsPoSHeader called with invalid difficulty")
 	}
