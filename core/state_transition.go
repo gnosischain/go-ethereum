@@ -759,9 +759,11 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	}
 
 	// Pay the effective transaction fee to the specific coinbase
+	var baseFee *uint256.Int
 	effectiveTip := msg.GasPrice
 	if rules.IsLondon {
-		baseFee, overflow := uint256.FromBig(st.evm.Context.BaseFee)
+		var overflow bool
+		baseFee, overflow = uint256.FromBig(st.evm.Context.BaseFee)
 		if overflow {
 			return nil, fmt.Errorf("invalid baseFee: %v", st.evm.Context.BaseFee)
 		}
@@ -781,16 +783,15 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		fee.Mul(fee, effectiveTip)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee, tracing.BalanceIncreaseRewardTransactionFee)
 
-		// XXX rules.IsLondon shouldn't be necessary
-		// Move the remainder to the eip1559 fee collector
-		if rules.IsLondon {
-			if !msg.IsFree() && st.evm.ChainConfig().Aura != nil {
-				burntContractAddress := *st.evm.ChainConfig().Aura.Eip1559FeeCollector
-				burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(gasUsed), uint256.MustFromBig(st.evm.Context.BaseFee))
-				st.state.AddBalance(burntContractAddress, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
+		// Move the base fee to the configured AuRa EIP-1559 fee collector.
+		if !msg.IsFree() && baseFee != nil {
+			if aura := st.evm.ChainConfig().Aura; aura != nil && aura.Eip1559FeeCollector != nil {
+				feeCollector := *aura.Eip1559FeeCollector
+				burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(gasUsed), baseFee)
+				st.state.AddBalance(feeCollector, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
 				if rules.IsPrague && st.evm.Context.BlobBaseFee != nil {
 					blobfee := uint256.NewInt(st.blobGasUsed() * st.evm.Context.BlobBaseFee.Uint64())
-					st.state.AddBalance(burntContractAddress, blobfee, tracing.BalanceChangeUnspecified)
+					st.state.AddBalance(feeCollector, blobfee, tracing.BalanceChangeUnspecified)
 				}
 			}
 		}
