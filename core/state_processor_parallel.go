@@ -66,6 +66,10 @@ func supportsParallelExecution(block *types.Block, config *params.ChainConfig, w
 	if wantWitness {
 		return false
 	}
+	// disable for AuRa chains
+	if config.Aura != nil {
+		return false
+	}
 	// Disable the parallel execution if either the Amsterdam hasn't been
 	// activated, or the accessList is not accessible.
 	return block.AccessList() != nil && config.IsAmsterdam(block.Number(), block.Time())
@@ -289,15 +293,15 @@ func (p *StateProcessor) processParallel(ctx context.Context, block *types.Block
 		postEVM.SetPrecompileCache(precompileCache)
 	}
 	requests, postBAL, err := PostExecution(ctx, config, header.Number, header.Time, allLogs, postEVM, postIndex)
-	postEVM.Release()
 	if err != nil {
 		return nil, err
 	}
 	blockAccessList.Merge(postBAL)
-	p.chain.Engine().Finalize(p.chain, header, postState, block.Body(), postIndex, blockAccessList)
+	p.chain.Engine().Finalize(p.chain, header, postState, block.Body(), receipts, postEVM, postIndex, blockAccessList)
 	if err := postState.Error(); err != nil {
 		return nil, fmt.Errorf("database error in post-execution system calls: %w", err)
 	}
+	postEVM.Release()
 	systemExec += time.Since(postStart)
 
 	// Join the concurrent root computation.
@@ -442,7 +446,7 @@ func (p *StateProcessor) executeTransactionsParallel(ctx context.Context, block 
 				// A transaction-local gas pool, sized to the block gas limit so
 				// that an oversized transaction is rejected before it runs.
 				gp := NewGasPool(gasLimit)
-				receipt, accessList, err := ApplyTransactionWithEVM(ctx, msg, gp, sdb, blockNumber, blockHash, context.Time, tx, evm)
+				receipt, accessList, err := ApplyTransactionWithEVM(ctx, msg, gp, sdb, blockNumber, blockHash, context.Time, tx, evm, p.chain.Engine())
 				if err != nil {
 					return fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 				}

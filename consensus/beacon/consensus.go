@@ -23,8 +23,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/aura"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/bal"
@@ -334,37 +336,54 @@ func (beacon *Beacon) verifyHeaders(chain consensus.ChainHeaderReader, headers [
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the beacon protocol. The changes are done inline.
-func (beacon *Beacon) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
+func (beacon *Beacon) Prepare(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB) error {
 	if !chain.Config().IsPostMerge(header.Number.Uint64(), header.Time) {
-		return beacon.ethone.Prepare(chain, header)
+		return beacon.ethone.Prepare(chain, header, statedb)
 	}
 	header.Difficulty = beaconDifficulty
 	return nil
 }
 
 // Finalize implements consensus.Engine and processes withdrawals on top.
-func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body, blockAccessIndex uint32, bal *bal.ConstructionBlockAccessList) {
+func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body, receipts []*types.Receipt, evm *vm.EVM, blockAccessIndex uint32, bal *bal.ConstructionBlockAccessList) {
 	if !beacon.IsPoSHeader(header) {
-		beacon.ethone.Finalize(chain, header, state, body, blockAccessIndex, bal)
+		beacon.ethone.Finalize(chain, header, state, body, receipts, evm, blockAccessIndex, bal)
 		return
 	}
-	// Withdrawals processing.
-	for _, w := range body.Withdrawals {
-		// Convert amount from gwei to wei.
-		amount := new(uint256.Int).SetUint64(w.Amount)
-		amount = amount.Mul(amount, uint256.NewInt(params.GWei))
-		prev := state.AddBalance(w.Address, amount, tracing.BalanceIncreaseWithdrawal)
 
-		// Populate the block-level accessList if Amsterdam is enabled
-		if chain.Config().IsAmsterdam(header.Number, header.Time) {
-			if w.Amount == 0 {
-				// Zero amount withdrawal, account is accessed potential
-				// without state changes.
-				bal.AccountRead(w.Address)
-			} else {
-				// Non-zero amount withdrawal, account is accessed with
-				// a balance change.
-				bal.BalanceChange(blockAccessIndex, w.Address, new(uint256.Int).Add(&prev, amount))
+	// GNOSIS: if the network has merged and this was an ex-AuRa
+	// network, still call the reward contract.
+	if a, ok := beacon.ethone.(*aura.AuRa); ok {
+		if err := a.ApplyRewards(header, state, evm); err != nil {
+			panic(fmt.Sprintf("error applying reward %v", err))
+		}
+	}
+
+	// Withdrawals processing.
+	if auraEngine, ok := beacon.ethone.(*aura.AuRa); ok {
+		if body.Withdrawals != nil {
+			if err := auraEngine.ExecuteSystemWithdrawals(evm, body.Withdrawals); err != nil {
+				panic(err)
+			}
+		}
+	} else {
+		for _, w := range body.Withdrawals {
+			// Convert amount from gwei to wei.
+			amount := new(uint256.Int).SetUint64(w.Amount)
+			amount = amount.Mul(amount, uint256.NewInt(params.GWei))
+			prev := state.AddBalance(w.Address, amount, tracing.BalanceIncreaseWithdrawal)
+
+			// Populate the block-level accessList if Amsterdam is enabled
+			if chain.Config().IsAmsterdam(header.Number, header.Time) {
+				if w.Amount == 0 {
+					// Zero amount withdrawal, account is accessed potential
+					// without state changes.
+					bal.AccountRead(w.Address)
+				} else {
+					// Non-zero amount withdrawal, account is accessed with
+					// a balance change.
+					bal.BalanceChange(blockAccessIndex, w.Address, new(uint256.Int).Add(&prev, amount))
+				}
 			}
 		}
 	}
@@ -431,4 +450,12 @@ func (beacon *Beacon) SetThreads(threads int) {
 	if th, ok := beacon.ethone.(threaded); ok {
 		th.SetThreads(threads)
 	}
+}
+
+func (beacon *Beacon) AuraPrepare(evm *vm.EVM, header *types.Header, chain consensus.ChainHeaderReader) error {
+	ethone, ok := beacon.ethone.(*aura.AuRa)
+	if !ok {
+		panic("AuraPrepare called in a non-Aura context")
+	}
+	return ethone.AuraPrepare(evm, header, chain)
 }

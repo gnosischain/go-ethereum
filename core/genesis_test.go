@@ -187,6 +187,8 @@ func TestGenesisHashes(t *testing.T) {
 		{DefaultGenesisBlock(), params.MainnetGenesisHash},
 		{DefaultSepoliaGenesisBlock(), params.SepoliaGenesisHash},
 		{DefaultHoodiGenesisBlock(), params.HoodiGenesisHash},
+		{DefaultGnosisGenesisBlock(), params.GnosisGenesisHash},
+		{DefaultChiadoGenesisBlock(), params.ChiadoGenesisHash},
 	} {
 		// Test via MustCommit
 		db := rawdb.NewMemoryDatabase()
@@ -333,5 +335,19 @@ func TestBinaryGenesisCommit(t *testing.T) {
 	vdb := rawdb.NewTable(db, string(rawdb.VerklePrefix))
 	if !rawdb.HasAccountTrieNode(vdb, nil) {
 		t.Fatal("could not find node")
+	}
+}
+
+func TestGnosisGenesisBlocks(t *testing.T) {
+	if DefaultGnosisGenesisBlock().ToBlock().Hash() != params.GnosisGenesisHash {
+		t.Fatalf("invalid gnosis chain genesis block. got %x, want %x", DefaultChiadoGenesisBlock().ToBlock().Hash(), params.GnosisGenesisHash)
+	}
+
+	chiadoGenesis := DefaultChiadoGenesisBlock().ToBlock()
+	if chiadoGenesis.Root() != params.ChiadoGenesisStateRoot {
+		t.Fatalf("invalid chiado state root, got %x, want %x", chiadoGenesis.Root(), params.ChiadoGenesisStateRoot)
+	}
+	if chiadoGenesis.Hash() != params.ChiadoGenesisHash {
+		t.Fatalf("invalid chiado genesis block, got %x, want %x", chiadoGenesis.Hash(), params.ChiadoGenesisHash)
 	}
 }

@@ -37,7 +37,7 @@ func TestLimboLegacyMigration(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write a single entry using the legacy on-disk layout.
-	store, err := billy.Open(billy.Options{Path: dir}, newSlotterEIP7594(params.BlobTxMaxBlobs), nil)
+	store, err := billy.Open(billy.Options{Path: dir}, newSlotterEIP7594(params.DefaultBlobTxMaxBlobs), nil)
 	if err != nil {
 		t.Fatalf("failed to open store: %v", err)
 	}

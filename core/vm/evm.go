@@ -546,7 +546,6 @@ func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value 
 	if err != nil {
 		return nil, common.Address{}, gas, err
 	}
-	// Increment the caller's nonce after passing all validations
 	evm.StateDB.SetNonce(caller, evm.StateDB.GetNonce(caller)+1, tracing.NonceChangeContractCreator)
 
 	// Charge the contract creation init gas in verkle mode
@@ -594,8 +593,10 @@ func (evm *EVM) create(caller common.Address, code []byte, gas GasBudget, value 
 	// acts inside that account.
 	evm.StateDB.CreateContract(address)
 
-	if evm.chainRules.IsEIP158 {
-		evm.StateDB.SetNonce(address, 1, tracing.NonceChangeNewContract)
+	// On gnosis chains, this is activated as part of SpuriousDragon in
+	// spite of being part of eip 161.
+	if evm.chainRules.IsEIP155 {
+		evm.StateDB.SetNonce(address, 1, tracing.NonceChangeContractCreator)
 	}
 	// Charge the contract creation init gas in verkle mode
 	if evm.chainRules.IsEIP4762 {
@@ -677,8 +678,11 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address) ([]b
 		if !contract.chargeExecution(createDataCost, evm.Config.Tracer, tracing.GasChangeCallCodeStorage) {
 			return ret, ErrCodeStoreOutOfGas
 		}
-		if err := CheckMaxCodeSize(&evm.chainRules, uint64(len(ret))); err != nil {
-			return ret, err
+		// Gnosis activates EIP-170 at Shapella rather than Spurious Dragon.
+		if evm.chainRules.IsShanghai {
+			if err := CheckMaxCodeSize(&evm.chainRules, uint64(len(ret))); err != nil {
+				return ret, err
+			}
 		}
 	}
 	if len(ret) > 0 {

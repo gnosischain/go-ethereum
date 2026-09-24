@@ -293,6 +293,16 @@ type Message struct {
 	// - From is not verified to be an EOA
 	// - GasLimit is not checked against the protocol defined tx gaslimit
 	SkipTransactionChecks bool
+
+	isFree bool
+}
+
+func (msg *Message) SetFree() {
+	msg.isFree = true
+}
+
+func (msg *Message) IsFree() bool {
+	return msg.isFree
 }
 
 // TransactionToMessage converts a transaction into a Message.
@@ -581,7 +591,7 @@ func (st *stateTransition) preCheck(rules params.Rules) error {
 			}
 			// This will panic if baseFee is nil, but basefee presence is verified
 			// as part of header validation.
-			if msg.GasFeeCap.CmpBig(st.evm.Context.BaseFee) < 0 {
+			if msg.GasFeeCap.CmpBig(st.evm.Context.BaseFee) < 0 && !msg.IsFree() {
 				return fmt.Errorf("%w: address %v, maxFeePerGas: %s, baseFee: %s", ErrFeeCapTooLow,
 					msg.From.Hex(), msg.GasFeeCap, st.evm.Context.BaseFee)
 			}
@@ -605,7 +615,7 @@ func (st *stateTransition) preCheck(rules params.Rules) error {
 		if len(msg.BlobHashes) == 0 {
 			return ErrMissingBlobHashes
 		}
-		if rules.IsOsaka && len(msg.BlobHashes) > params.BlobTxMaxBlobs {
+		if rules.IsOsaka && len(msg.BlobHashes) > st.evm.ChainConfig().GetMaxBlobsPerTransaction() {
 			return ErrTooManyBlobs
 		}
 		for i, hash := range msg.BlobHashes {
@@ -757,13 +767,20 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 	}
 
 	// Pay the effective transaction fee to the specific coinbase
+	var baseFee *uint256.Int
 	effectiveTip := msg.GasPrice
 	if rules.IsLondon {
-		baseFee, overflow := uint256.FromBig(st.evm.Context.BaseFee)
+		var overflow bool
+		baseFee, overflow = uint256.FromBig(st.evm.Context.BaseFee)
 		if overflow {
 			return nil, fmt.Errorf("invalid baseFee: %v", st.evm.Context.BaseFee)
 		}
-		effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
+
+		if msg.IsFree() {
+			effectiveTip = new(uint256.Int)
+		} else {
+			effectiveTip = new(uint256.Int).Sub(msg.GasPrice, baseFee)
+		}
 	}
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
@@ -773,6 +790,19 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 		fee := new(uint256.Int).SetUint64(gasUsed)
 		fee.Mul(fee, effectiveTip)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee, tracing.BalanceIncreaseRewardTransactionFee)
+
+		// Move the base fee to the configured AuRa EIP-1559 fee collector.
+		if !msg.IsFree() && baseFee != nil {
+			if aura := st.evm.ChainConfig().Aura; aura != nil && aura.Eip1559FeeCollector != nil {
+				feeCollector := *aura.Eip1559FeeCollector
+				burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(gasUsed), baseFee)
+				st.state.AddBalance(feeCollector, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
+				if rules.IsPrague && st.evm.Context.BlobBaseFee != nil {
+					blobfee := uint256.NewInt(st.blobGasUsed() * st.evm.Context.BlobBaseFee.Uint64())
+					st.state.AddBalance(feeCollector, blobfee, tracing.BalanceChangeUnspecified)
+				}
+			}
+		}
 
 		// add the coinbase to the witness iff the fee is greater than 0
 		if rules.IsEIP4762 && fee.Sign() != 0 {

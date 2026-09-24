@@ -157,6 +157,16 @@ var (
 		Usage:    "Hoodi network: pre-configured proof-of-stake test network",
 		Category: flags.EthCategory,
 	}
+	GnosisChainFlag = &cli.BoolFlag{
+		Name:     "gnosis",
+		Usage:    "Gnosis chain network: pre-configured merged proof-of-authority test network",
+		Category: flags.EthCategory,
+	}
+	ChiadoFlag = &cli.BoolFlag{
+		Name:     "chiado",
+		Usage:    "Chiado network: pre-configured merged proof-of-authority test network",
+		Category: flags.EthCategory,
+	}
 	// Dev mode
 	DeveloperFlag = &cli.BoolFlag{
 		Name:     "dev",
@@ -1154,6 +1164,8 @@ var (
 	TestnetFlags = []cli.Flag{
 		SepoliaFlag,
 		HoodiFlag,
+		GnosisChainFlag,
+		ChiadoFlag,
 	}
 	// NetworkFlags is the flag group of all built-in supported networks.
 	NetworkFlags = append([]cli.Flag{MainnetFlag}, TestnetFlags...)
@@ -1186,6 +1198,12 @@ func MakeDataDir(ctx *cli.Context) string {
 		}
 		if ctx.Bool(HoodiFlag.Name) {
 			return filepath.Join(path, "hoodi")
+		}
+		if ctx.Bool(GnosisChainFlag.Name) {
+			return filepath.Join(path, "gnosis")
+		}
+		if ctx.Bool(ChiadoFlag.Name) {
+			return filepath.Join(path, "chiado")
 		}
 		return path
 	}
@@ -1245,6 +1263,10 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 		switch {
 		case ctx.Bool(SepoliaFlag.Name):
 			urls = params.SepoliaBootnodes
+		case ctx.Bool(GnosisChainFlag.Name):
+			urls = params.GnosisBootnodes
+		case ctx.Bool(ChiadoFlag.Name):
+			urls = params.ChiadoBootnodes
 		case ctx.Bool(HoodiFlag.Name):
 			urls = params.HoodiBootnodes
 		}
@@ -1621,6 +1643,10 @@ func SetDataDir(ctx *cli.Context, cfg *node.Config) {
 		cfg.DataDir = "" // unless explicitly requested, use memory databases
 	case ctx.Bool(SepoliaFlag.Name) && cfg.DataDir == node.DefaultDataDir():
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "sepolia")
+	case ctx.Bool(GnosisChainFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "gnosis")
+	case ctx.Bool(ChiadoFlag.Name) && cfg.DataDir == node.DefaultDataDir():
+		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "chiado")
 	case ctx.Bool(HoodiFlag.Name) && cfg.DataDir == node.DefaultDataDir():
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "hoodi")
 	}
@@ -1742,8 +1768,7 @@ func setRequiredBlocks(ctx *cli.Context, cfg *ethconfig.Config) {
 
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
-	// Avoid conflicting network flags
-	flags.CheckExclusive(ctx, MainnetFlag, DeveloperFlag, SepoliaFlag, HoodiFlag, OverrideGenesisFlag)
+	flags.CheckExclusive(ctx, MainnetFlag, DeveloperFlag, SepoliaFlag, HoodiFlag, OverrideGenesisFlag, ChiadoFlag, GnosisChainFlag)
 	flags.CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 
 	// Set configurations from CLI flags
@@ -1981,6 +2006,14 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		cfg.NetworkId = 560048
 		cfg.Genesis = core.DefaultHoodiGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.HoodiGenesisHash)
+	case ctx.Bool(GnosisChainFlag.Name):
+		cfg.NetworkId = 100
+		cfg.Genesis = core.DefaultGnosisGenesisBlock()
+		SetDNSDiscoveryDefaults(cfg, params.GnosisGenesisHash)
+	case ctx.Bool(ChiadoFlag.Name):
+		cfg.NetworkId = 10200
+		cfg.Genesis = core.DefaultChiadoGenesisBlock()
+		SetDNSDiscoveryDefaults(cfg, params.ChiadoGenesisHash)
 	case ctx.Bool(DeveloperFlag.Name):
 		cfg.NetworkId = 1337
 		cfg.SyncMode = ethconfig.FullSync
@@ -2116,7 +2149,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 func MakeBeaconLightConfig(ctx *cli.Context) bparams.ClientConfig {
 	var config bparams.ClientConfig
 	customConfig := ctx.IsSet(BeaconConfigFlag.Name)
-	flags.CheckExclusive(ctx, MainnetFlag, SepoliaFlag, HoodiFlag, BeaconConfigFlag)
+	flags.CheckExclusive(ctx, MainnetFlag, SepoliaFlag, HoodiFlag, BeaconConfigFlag, ChiadoFlag, GnosisChainFlag)
 	switch {
 	case ctx.Bool(MainnetFlag.Name):
 		config.ChainConfig = *bparams.MainnetLightConfig
@@ -2423,6 +2456,10 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 		genesis = core.DefaultSepoliaGenesisBlock()
 	case ctx.Bool(HoodiFlag.Name):
 		genesis = core.DefaultHoodiGenesisBlock()
+	case ctx.Bool(GnosisChainFlag.Name):
+		genesis = core.DefaultGnosisGenesisBlock()
+	case ctx.Bool(ChiadoFlag.Name):
+		genesis = core.DefaultChiadoGenesisBlock()
 	case ctx.Bool(DeveloperFlag.Name):
 		Fatalf("Developer chains are ephemeral")
 	}
