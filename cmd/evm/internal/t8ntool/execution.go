@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	stdmath "math"
 	"math/big"
 	"os"
 
