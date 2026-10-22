@@ -18,10 +18,14 @@ package core
 
 import (
 	"bytes"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 )
@@ -358,5 +362,52 @@ func TestIntrinsicGas(t *testing.T) {
 				t.Fatalf("gas mismatch: got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestAuraBlobFeeCollection checks that the blob fee credited to the AuRa fee
+// collector is not truncated when the blob base fee exceeds 64 bits.
+func TestAuraBlobFeeCollection(t *testing.T) {
+	var (
+		sender      = common.HexToAddress("0x1111111111111111111111111111111111111111")
+		to          = common.HexToAddress("0x2222222222222222222222222222222222222222")
+		collector   = common.HexToAddress("0x1559000000000000000000000000000000000000")
+		blobBaseFee = new(big.Int).Lsh(big.NewInt(1), 70)
+		config      = *params.MergedTestChainConfig
+	)
+	config.Aura = &params.AuRaConfig{Eip1559FeeCollector: &collector}
+
+	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+	statedb.SetBalance(sender, new(uint256.Int).Lsh(uint256.NewInt(1), 200), tracing.BalanceChangeUnspecified)
+
+	blockCtx := vm.BlockContext{
+		CanTransfer: CanTransfer,
+		Transfer:    Transfer,
+		BlockNumber: big.NewInt(1),
+		Random:      &common.Hash{},
+		GasLimit:    30_000_000,
+		BaseFee:     big.NewInt(1),
+		BlobBaseFee: blobBaseFee,
+	}
+	evm := vm.NewEVM(blockCtx, statedb, &config, vm.Config{})
+	msg := &Message{
+		From:          sender,
+		To:            &to,
+		Value:         new(uint256.Int),
+		GasLimit:      params.TxGas,
+		GasPrice:      uint256.NewInt(1),
+		GasFeeCap:     uint256.NewInt(1),
+		GasTipCap:     new(uint256.Int),
+		BlobGasFeeCap: uint256.MustFromBig(blobBaseFee),
+		BlobHashes:    []common.Hash{{0x01}},
+	}
+	res, err := ApplyMessage(evm, msg, NewGasPool(blockCtx.GasLimit))
+	if err != nil {
+		t.Fatalf("failed to apply message: %v", err)
+	}
+	want := new(uint256.Int).Mul(uint256.MustFromBig(blobBaseFee), uint256.NewInt(params.BlobTxBlobGasPerBlob))
+	want.Add(want, uint256.NewInt(res.UsedGas))
+	if have := statedb.GetBalance(collector); !have.Eq(want) {
+		t.Fatalf("fee collector balance mismatch: have %v, want %v", have, want)
 	}
 }

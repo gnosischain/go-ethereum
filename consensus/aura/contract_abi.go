@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries []common.Address, rewardKind []consensus.RewardKind) ([]common.Address, []*big.Int) {
+func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries []common.Address, rewardKind []consensus.RewardKind) ([]common.Address, []*big.Int, error) {
 	castedKind := make([]uint16, len(rewardKind))
 	for i := range rewardKind {
 		castedKind[i] = uint16(rewardKind[i])
@@ -23,18 +23,18 @@ func callBlockRewardAbi(contractAddr common.Address, evm *vm.EVM, beneficiaries 
 	}
 	out, err := systemCall(evm, contractAddr, packed)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	if len(out) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	res, err := blockRewardAbi().Unpack("reward", out)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	beneficiariesRes := res[0].([]common.Address)
 	rewardsBig := res[1].([]*big.Int)
-	return beneficiariesRes, rewardsBig
+	return beneficiariesRes, rewardsBig, nil
 }
 
 func blockRewardAbi() abi.ABI {
