@@ -245,11 +245,11 @@ func systemCall(evm *vm.EVM, contractAddr common.Address, data []byte) ([]byte, 
 	}
 	ret, _, err := evm.Call(params.SystemAddress, contractAddr, data, vm.NewGasBudget(math.MaxUint64, 0), new(uint256.Int))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	rules.IsEIP158 = true
 	evm.StateDB.Finalise(rules)
-	return ret, err
+	return ret, nil
 }
 
 // AuRa
@@ -445,6 +445,9 @@ func (c *AuRa) verifyHeader(chain consensus.ChainHeaderReader, header, parent *t
 	// Verify that the gas limit is <= 2^63-1
 	if header.GasLimit > params.MaxGasLimit {
 		return fmt.Errorf("invalid gasLimit: have %v, max %v", header.GasLimit, params.MaxGasLimit)
+	}
+	if header.GasLimit < params.MinGasLimit {
+		return fmt.Errorf("invalid gas limit below %d", params.MinGasLimit)
 	}
 	// Verify that the gasUsed is <= gasLimit
 	if header.GasUsed > header.GasLimit {
@@ -857,8 +860,10 @@ func calculateRewards(config *AuthorityRoundParams, header *types.Header, evm *v
 	if foundContract {
 		beneficiaries := []common.Address{header.Coinbase}
 		rewardKind := []consensus.RewardKind{consensus.RewardAuthor}
-		var amounts []*big.Int
-		beneficiaries, amounts = callBlockRewardAbi(rewardContractAddress.address, evm, beneficiaries, rewardKind)
+		beneficiaries, amounts, err := callBlockRewardAbi(rewardContractAddress.address, evm, beneficiaries, rewardKind)
+		if err != nil {
+			return nil, err
+		}
 		rewards := make([]consensus.Reward, len(amounts))
 		for i, amount := range amounts {
 			rewards[i].Beneficiary = beneficiaries[i]
