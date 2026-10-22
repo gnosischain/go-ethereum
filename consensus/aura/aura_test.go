@@ -1,6 +1,7 @@
 package aura_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -45,4 +47,28 @@ func TestGnosisEmptyBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, blocks, n)
 	require.Equal(t, chain[blocks-1].Hash(), bc.CurrentBlock().Hash())
+}
+
+// TestVerifyHeaderMinGasLimit checks that headers with a gas limit below the
+// protocol minimum are rejected.
+func TestVerifyHeaderMinGasLimit(t *testing.T) {
+	genesis := core.DefaultGnosisGenesisBlock()
+
+	engine, err := aura.NewAuRa(genesis.Config.Aura, rawdb.NewMemoryDatabase())
+	require.NoError(t, err)
+	defer engine.Close()
+
+	bc, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), genesis, beacon.New(engine), nil)
+	require.NoError(t, err)
+	defer bc.Stop()
+
+	parent := bc.Genesis().Header()
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     big.NewInt(1),
+		GasLimit:   params.MinGasLimit - 1,
+		Time:       parent.Time + 5,
+		Difficulty: parent.Difficulty,
+	}
+	require.ErrorContains(t, engine.VerifyHeader(bc, header), "invalid gas limit below")
 }

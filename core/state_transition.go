@@ -841,7 +841,8 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 			burnAmount := new(uint256.Int).Mul(new(uint256.Int).SetUint64(gasUsed), baseFee)
 			st.state.AddBalance(feeCollector, burnAmount, tracing.BalanceIncreaseRewardTransactionFee)
 			if rules.IsPrague && st.evm.Context.BlobBaseFee != nil {
-				blobfee := uint256.NewInt(st.blobGasUsed() * st.evm.Context.BlobBaseFee.Uint64())
+				blobBaseFee, _ := uint256.FromBig(st.evm.Context.BlobBaseFee)
+				blobfee := new(uint256.Int).Mul(blobBaseFee, uint256.NewInt(st.blobGasUsed()))
 				st.state.AddBalance(feeCollector, blobfee, tracing.BalanceChangeUnspecified)
 			}
 		}
